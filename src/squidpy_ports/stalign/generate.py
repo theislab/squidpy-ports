@@ -133,6 +133,36 @@ def _rasters(st, clouds: F.Clouds):
     return (xi, yi, image_ref), (xj, yj, image_query)
 
 
+def _upstream_velocity_grid(st, *, rasters) -> list[np.ndarray]:
+    """The grid ``LDDMM`` builds for itself, read off a one-iteration probe run.
+
+    Taken from the return value rather than recomputed, so the `torch.arange` at
+    STalign.py:1069 stays the only definition of it.
+    """
+    (xi, yi, image_ref), (xj, yj, image_query) = rasters
+    probe = st.LDDMM(
+        [yi, xi], image_ref, [yj, xj], image_query,
+        L=np.eye(2), T=np.zeros(2), niter=1, **F.LDDMM_PARAMS,
+    )  # fmt: skip
+    return [x.numpy() for x in probe["xv"]]
+
+
+def _smooth_velocity(xv, nt: int) -> np.ndarray:
+    """A plausible non-zero velocity field on ``xv``.
+
+    Double-cumsum of a normal draw, i.e. low frequency. A raw normal draw is nothing like
+    a real velocity field and would exercise only the interpolator's noise response.
+
+    This matters for more than the interpolation tests: at ``v = 0`` the regularisation
+    term and its gradient are both identically zero, so an objective evaluated only at
+    the origin cannot see that term at all. Every energy and gradient fixture is therefore
+    emitted twice -- once at ``v = 0`` (LDDMM's true initial state) and once here.
+    """
+    rng = np.random.default_rng(F.SEED + 2)
+    field = rng.normal(scale=12.0, size=(nt, xv[0].size, xv[1].size, 2))
+    return np.cumsum(np.cumsum(field, axis=1), axis=2) / (xv[0].size * xv[1].size)
+
+
 def _write_primitives(st, clouds: F.Clouds, out: Path) -> None:
     import torch
 
@@ -165,20 +195,9 @@ def _write_primitives(st, clouds: F.Clouds, out: Path) -> None:
     trans = np.array([12.5, -7.25])
     affine = st.to_A(torch.as_tensor(lin), torch.as_tensor(trans)).numpy()
 
-    # --- velocity field, v_to_phii and the point transforms --------------------------
-    # Upstream returns its own xv, so we take it rather than recomputing the arange.
-    probe = st.LDDMM(
-        [yi, xi], image_ref, [yj, xj], image_query,
-        L=np.eye(2), T=np.zeros(2), niter=1, **F.LDDMM_PARAMS,
-    )  # fmt: skip
-    xv = [x.numpy() for x in probe["xv"]]
-
-    rng_v = np.random.default_rng(F.SEED + 2)
-    nt = F.LDDMM_PARAMS["nt"]
-    smooth = rng_v.normal(scale=12.0, size=(nt, xv[0].size, xv[1].size, 2))
-    # A low-frequency field: a raw normal draw is nowhere near a plausible velocity and
-    # would exercise only the interpolator's noise response.
-    smooth = np.cumsum(np.cumsum(smooth, axis=1), axis=2) / (xv[0].size * xv[1].size)
+    # --- velocity field and the point transforms -------------------------------------
+    xv = _upstream_velocity_grid(st, rasters=((xi, yi, image_ref), (xj, yj, image_query)))
+    smooth = _smooth_velocity(xv, F.LDDMM_PARAMS["nt"])
     velocity = torch.as_tensor(smooth)
 
     # `build_transform(direction='b')` is the public form of exactly what squidpy's
@@ -277,16 +296,34 @@ def _write_energy(st, clouds: F.Clouds, out: Path) -> None:
     rasters = _rasters(st, clouds)
     lin, trans = st.L_T_from_points(clouds.landmarks_query_rc, clouds.landmarks_ref_rc)
 
-    payload: dict[str, Any] = {"__provenance__": _provenance(section="energy"), "L": lin, "T": trans}
+    xv = _upstream_velocity_grid(st, rasters=rasters)
+    payload: dict[str, Any] = {
+        "__provenance__": _provenance(section="energy"),
+        "L": lin,
+        "T": trans,
+        # Upstream's own velocity grid. `_lddmm_loss` takes `xv` explicitly, so the
+        # squidpy side can evaluate the objective in exactly this configuration.
+        "xv_0": xv[0],
+        "xv_1": xv[1],
+    }
     for nt in (1, 3):
         for with_points in (False, True):
             kwargs = _lddmm_kwargs(clouds, rasters, with_points=with_points, nt=nt)
-            run, captured = upstream.lddmm_with_grads(st, niter=1, L=lin, T=trans, **kwargs)
             key = f"E_nt{nt}_{'points' if with_points else 'nopoints'}"
+
+            # v = 0, LDDMM's true starting state.
+            _, captured = upstream.lddmm_with_grads(st, niter=1, L=lin, T=trans, **kwargs)
             payload[key] = np.array(captured["E"][0])
-            # Upstream's own velocity grid. `_lddmm_loss` takes `xv` explicitly, so the
-            # squidpy side can evaluate the objective in exactly this configuration.
-            payload["xv_0"], payload["xv_1"] = (x.numpy() for x in run["xv"])
+
+            # v != 0, so the regularisation term is actually exercised. Without this the
+            # whole ER term is invisible: at v = 0 it contributes exactly nothing, and a
+            # sign error in it would compare equal.
+            warm = _smooth_velocity(xv, nt)
+            payload[f"{key}_warmv"] = np.array(
+                upstream.lddmm_with_grads(st, niter=1, L=lin, T=trans, xv=list(xv), v=warm, **kwargs)[1]["E"][0]
+            )
+    payload["warm_velocity_nt1"] = _smooth_velocity(xv, 1)
+    payload["warm_velocity_nt3"] = _smooth_velocity(xv, 3)
     np.savez_compressed(out / "energy.npz", **payload)
 
 
@@ -325,6 +362,14 @@ def _write_gradients(st, clouds: F.Clouds, out: Path) -> None:
                 f"one of the spies no longer matches the vendored loop"
             )
 
+    # The same three gradients at a non-zero velocity. At v = 0 the regularisation term
+    # and its gradient both vanish identically, so gradients taken only at the origin
+    # cannot detect any error in that term.
+    xv = [x.numpy() for x in one["xv"]]
+    warm = _smooth_velocity(xv, F.LDDMM_PARAMS["nt"])
+    warm_run, warm_captured = upstream.lddmm_with_grads(st, niter=1, L=lin, T=trans, xv=list(xv), v=warm, **kwargs)
+    grad_v_warm = (warm - warm_run["v"].numpy()) / F.LDDMM_PARAMS["epV"]
+
     np.savez_compressed(
         out / "gradients.npz",
         __provenance__=_provenance(section="gradients"),
@@ -332,13 +377,17 @@ def _write_gradients(st, clouds: F.Clouds, out: Path) -> None:
         T=trans,
         # Upstream's own grid; `_lddmm_loss` accepts `xv`, so squidpy differentiates the
         # objective in exactly this configuration.
-        xv_0=one["xv"][0].numpy(),
-        xv_1=one["xv"][1].numpy(),
+        xv_0=xv[0],
+        xv_1=xv[1],
         grad_L=grad_l_hook,
         grad_T=grad_t_hook,
         grad_L_from_delta=grad_l_delta,
         grad_T_from_delta=grad_t_delta,
         grad_v_smoothed=grad_v,
+        warm_velocity=warm,
+        grad_L_warmv=warm_captured["L"][0].numpy(),
+        grad_T_warmv=warm_captured["T"][0].numpy(),
+        grad_v_smoothed_warmv=grad_v_warm,
     )
 
 
