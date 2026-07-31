@@ -67,8 +67,8 @@ optional-dependencies.test = [
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://squidpy-ports.readthedocs.io/"
-urls.Homepage = "https://github.com/scverse/squidpy-ports"
-urls.Source = "https://github.com/scverse/squidpy-ports"
+urls.Homepage = "https://github.com/theislab/squidpy-ports"
+urls.Source = "https://github.com/theislab/squidpy-ports"
 
 [tool.hatch.envs.default]
 installer = "uv"

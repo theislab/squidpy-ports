@@ -9,7 +9,7 @@
       "project_description": "Reference implementations and fixture generators for squidpy ports",
       "author_full_name": "Selman Ozleyen",
       "author_email": "selman.ozleyen@helmholtz-munich.de",
-      "github_user": "scverse",
+      "github_user": "theislab",
       "github_repo": "squidpy-ports",
       "license": "BSD 3-Clause License",
       "ide_integration": true,

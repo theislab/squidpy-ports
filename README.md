@@ -2,7 +2,7 @@
 
 [![Tests][badge-tests]][tests]
 
-[badge-tests]: https://img.shields.io/github/actions/workflow/status/scverse/squidpy-ports/test.yaml?branch=main
+[badge-tests]: https://img.shields.io/github/actions/workflow/status/theislab/squidpy-ports/test.yaml?branch=main
 
 Reference outputs for squidpy's ported algorithms.
 
@@ -74,5 +74,5 @@ For questions and help requests, you can reach out in the [scverse discourse][].
 If you found a bug, please use the [issue tracker][].
 
 [scverse discourse]: https://discourse.scverse.org/
-[issue tracker]: https://github.com/scverse/squidpy-ports/issues
-[tests]: https://github.com/scverse/squidpy-ports/actions/workflows/test.yaml
+[issue tracker]: https://github.com/theislab/squidpy-ports/issues
+[tests]: https://github.com/theislab/squidpy-ports/actions/workflows/test.yaml
