@@ -471,6 +471,9 @@ def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
     )
     run = st.LDDMM(niter=IMAGE_ITERS, **kwargs)
     nxt = st.LDDMM(niter=IMAGE_ITERS + 1, **kwargs)
+    # Per-iteration objective, so a disagreement can be bisected to the step it starts at
+    # rather than only observed at the end.
+    _, captured = upstream.lddmm_with_grads(st, niter=IMAGE_ITERS, **kwargs)
 
     # What `align(by="images", out="images/...")` materialises. Upstream's own composition
     # of build_transform + interp, rather than reassembling it here.
@@ -492,6 +495,9 @@ def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
         WA=run["WA"].numpy(),
         WB=run["WB"].numpy(),
         warped=warped.numpy(),
+        energies=np.asarray(captured["E"], dtype=float),
+        xv_0=run["xv"][0].numpy(),
+        xv_1=run["xv"][1].numpy(),
     )
 
 
