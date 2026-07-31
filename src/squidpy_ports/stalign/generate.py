@@ -85,28 +85,6 @@ def _provenance(**extra: Any) -> np.ndarray:
     return np.array(json.dumps(payload, indent=2, sort_keys=True))
 
 
-def _squidpy_velocity_grid(x_source: tuple[np.ndarray, np.ndarray], *, a: float, expand: float):
-    """Reproduce the grid squidpy's ``_build_velocity_grid`` builds.
-
-    Upstream's ``LDDMM`` accepts ``xv=``/``v=`` (STalign.py:1060-1064), so forcing it
-    onto *squidpy's* grid is how the trajectory comparison isolates the solver from the
-    grid off-by-one (divergence 2) without needing any change to squidpy's source.
-
-    Squidpy's grid is one point longer on each axis than upstream's, because it stops at
-    ``hi + step`` where upstream stops at ``hi``. The squidpy side asserts this array
-    equals what ``_build_velocity_grid`` actually returns, so the two cannot drift.
-    """
-    minimum = np.array([x_source[0][0], x_source[1][0]])
-    maximum = np.array([x_source[0][-1], x_source[1][-1]])
-    center = (minimum + maximum) / 2.0
-    half_width = (maximum - minimum) * expand / 2.0
-    step = a * 0.5
-    return (
-        np.arange(center[0] - half_width[0], center[0] + half_width[0] + step, step),
-        np.arange(center[1] - half_width[1], center[1] + half_width[1] + step, step),
-    )
-
-
 def _regularizer(xv, *, a: float, p: float):
     """``LL``, ``K`` and ``DV`` exactly as ``LDDMM`` computes them.
 
@@ -127,10 +105,16 @@ def _regularizer(xv, *, a: float, p: float):
 
 
 def _rasters(st, clouds: F.Clouds):
-    """Upstream rasterisations of both clouds, in the ``[Y, X]`` axis order LDDMM wants."""
-    xi, yi, image_ref = st.rasterize(clouds.ref[:, 0], clouds.ref[:, 1], draw=0, **F.RASTER_PARAMS)
-    xj, yj, image_query = st.rasterize(clouds.query[:, 0], clouds.query[:, 1], draw=0, **F.RASTER_PARAMS)
-    return (xi, yi, image_ref), (xj, yj, image_query)
+    """Upstream rasterisations, returned as ``(source, target)`` = ``(query, ref)``.
+
+    LDDMM's ``I``/``xI`` is the *moving* image and ``J``/``xJ`` the fixed one, matching
+    ``pointsI``/``pointsJ``. The query is what moves, so the query raster is the source --
+    feeding the ref raster as ``I`` while passing query landmarks as ``pointsI`` sets the
+    image term and the landmark term against each other and the fit goes nowhere.
+    """
+    xq, yq, image_query = st.rasterize(clouds.query[:, 0], clouds.query[:, 1], draw=0, **F.RASTER_PARAMS)
+    xr, yr, image_ref = st.rasterize(clouds.ref[:, 0], clouds.ref[:, 1], draw=0, **F.RASTER_PARAMS)
+    return (xq, yq, image_query), (xr, yr, image_ref)
 
 
 def _upstream_velocity_grid(st, *, rasters) -> list[np.ndarray]:
@@ -139,9 +123,9 @@ def _upstream_velocity_grid(st, *, rasters) -> list[np.ndarray]:
     Taken from the return value rather than recomputed, so the `torch.arange` at
     STalign.py:1069 stays the only definition of it.
     """
-    (xi, yi, image_ref), (xj, yj, image_query) = rasters
+    (xs, ys, source), (xt, yt, target) = rasters
     probe = st.LDDMM(
-        [yi, xi], image_ref, [yj, xj], image_query,
+        [ys, xs], source, [yt, xt], target,
         L=np.eye(2), T=np.zeros(2), niter=1, **F.LDDMM_PARAMS,
     )  # fmt: skip
     return [x.numpy() for x in probe["xv"]]
@@ -166,29 +150,30 @@ def _smooth_velocity(xv, nt: int) -> np.ndarray:
 def _write_primitives(st, clouds: F.Clouds, out: Path) -> None:
     import torch
 
-    (xi, yi, image_ref), (xj, yj, image_query) = _rasters(st, clouds)
+    # Source is the query (it moves); target is the ref. See `_rasters`.
+    (xs, ys, source_image), (xt, yt, target_image) = _rasters(st, clouds)
 
     # --- interp, both padding modes -------------------------------------------------
     # A 20x25 patch of off-grid sample points well inside the image, plus a second set
     # deliberately outside it so the zeros-vs-border difference is measurable.
     rng = np.random.default_rng(F.SEED + 1)
-    rows = np.linspace(yi[2], yi[-3], 20)
-    cols = np.linspace(xi[2], xi[-3], 25)
+    rows = np.linspace(ys[2], ys[-3], 20)
+    cols = np.linspace(xs[2], xs[-3], 25)
     grid = np.stack(np.meshgrid(rows, cols, indexing="ij"))
-    grid = grid + rng.uniform(-0.37, 0.37, size=grid.shape) * (yi[1] - yi[0])
+    grid = grid + rng.uniform(-0.37, 0.37, size=grid.shape) * (ys[1] - ys[0])
 
-    span_r, span_c = yi[-1] - yi[0], xi[-1] - xi[0]
+    span_r, span_c = ys[-1] - ys[0], xs[-1] - xs[0]
     outside = np.stack(
         np.meshgrid(
-            np.linspace(yi[0] - span_r, yi[-1] + span_r, 20),
-            np.linspace(xi[0] - span_c, xi[-1] + span_c, 25),
+            np.linspace(ys[0] - span_r, ys[-1] + span_r, 20),
+            np.linspace(xs[0] - span_c, xs[-1] + span_c, 25),
             indexing="ij",
         )
     )
 
-    interp_border = st.interp([yi, xi], image_ref, torch.as_tensor(grid), padding_mode="border").numpy()
-    interp_zeros_outside = st.interp([yi, xi], image_ref, torch.as_tensor(outside)).numpy()
-    interp_border_outside = st.interp([yi, xi], image_ref, torch.as_tensor(outside), padding_mode="border").numpy()
+    interp_border = st.interp([ys, xs], source_image, torch.as_tensor(grid), padding_mode="border").numpy()
+    interp_zeros_outside = st.interp([ys, xs], source_image, torch.as_tensor(outside)).numpy()
+    interp_border_outside = st.interp([ys, xs], source_image, torch.as_tensor(outside), padding_mode="border").numpy()
 
     # --- to_A -----------------------------------------------------------------------
     lin = np.array([[0.987, -0.153], [0.171, 1.014]])
@@ -196,7 +181,7 @@ def _write_primitives(st, clouds: F.Clouds, out: Path) -> None:
     affine = st.to_A(torch.as_tensor(lin), torch.as_tensor(trans)).numpy()
 
     # --- velocity field and the point transforms -------------------------------------
-    xv = _upstream_velocity_grid(st, rasters=((xi, yi, image_ref), (xj, yj, image_query)))
+    xv = _upstream_velocity_grid(st, rasters=((xs, ys, source_image), (xt, yt, target_image)))
     smooth = _smooth_velocity(xv, F.LDDMM_PARAMS["nt"])
     velocity = torch.as_tensor(smooth)
 
@@ -210,7 +195,7 @@ def _write_primitives(st, clouds: F.Clouds, out: Path) -> None:
         velocity,
         torch.as_tensor(affine),
         direction="b",
-        XJ=[torch.as_tensor(yj), torch.as_tensor(xj)],
+        XJ=[torch.as_tensor(yt), torch.as_tensor(xt)],
     ).numpy()
 
     pts = clouds.query_rc[:200]
@@ -240,12 +225,14 @@ def _write_primitives(st, clouds: F.Clouds, out: Path) -> None:
         query=clouds.query,
         landmarks_ref=clouds.landmarks_ref,
         landmarks_query=clouds.landmarks_query,
-        raster_ref_x=xi,
-        raster_ref_y=yi,
-        raster_ref=image_ref,
-        raster_query_x=xj,
-        raster_query_y=yj,
-        raster_query=image_query,
+        # The source raster is the query's, the target raster is the ref's. Keys are
+        # named after the cloud rather than the role so the two cannot be mixed up.
+        raster_query_x=xs,
+        raster_query_y=ys,
+        raster_query=source_image,
+        raster_ref_x=xt,
+        raster_ref_y=yt,
+        raster_ref=target_image,
         interp_coords=grid,
         interp_border=interp_border,
         interp_coords_outside=outside,
@@ -275,15 +262,15 @@ def _write_primitives(st, clouds: F.Clouds, out: Path) -> None:
 
 
 def _lddmm_kwargs(clouds: F.Clouds, rasters, *, with_points: bool, nt: int | None = None):
-    (xi, yi, image_ref), (xj, yj, image_query) = rasters
+    (xs, ys, source), (xt, yt, target) = rasters
     params = dict(F.LDDMM_PARAMS)
     if nt is not None:
         params["nt"] = nt
     kwargs: dict[str, Any] = {
-        "xI": [yi, xi],
-        "I": image_ref,
-        "xJ": [yj, xj],
-        "J": image_query,
+        "xI": [ys, xs],
+        "I": source,
+        "xJ": [yt, xt],
+        "J": target,
         **params,
     }
     if with_points:
@@ -393,10 +380,12 @@ def _write_gradients(st, clouds: F.Clouds, out: Path) -> None:
 
 def _write_trajectory(st, clouds: F.Clouds, out: Path) -> None:
     rasters = _rasters(st, clouds)
-    (xi, yi, _), _ = rasters
     lin, trans = st.L_T_from_points(clouds.landmarks_query_rc, clouds.landmarks_ref_rc)
 
-    xv = _squidpy_velocity_grid((yi, xi), a=F.LDDMM_PARAMS["a"], expand=F.LDDMM_PARAMS["expand"])
+    # Upstream's own grid, which squidpy's `_build_velocity_grid` now reproduces exactly.
+    # Passed back in explicitly (STalign.py:1060-1064 accepts `xv`/`v`) so the trajectory
+    # comparison stays valid even if either side's grid construction drifts again.
+    xv = _upstream_velocity_grid(st, rasters=rasters)
     v0 = np.zeros((F.LDDMM_PARAMS["nt"], xv[0].size, xv[1].size, 2))
     kwargs = _lddmm_kwargs(clouds, rasters, with_points=True)
 
@@ -409,8 +398,8 @@ def _write_trajectory(st, clouds: F.Clouds, out: Path) -> None:
 
         payload: dict[str, Any] = {
             "__provenance__": _provenance(section=f"trajectory_n{niter}", niter=niter),
-            "xv_squidpy_0": xv[0],
-            "xv_squidpy_1": xv[1],
+            "xv_0": xv[0],
+            "xv_1": xv[1],
             "L": lin,
             "T": trans,
             "A_stale": run["A"].numpy(),
