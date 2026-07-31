@@ -436,6 +436,20 @@ def _write_trajectory(st, clouds: F.Clouds, out: Path) -> None:
 IMAGE_PARAMS = {"a": 8.0, "p": 2.0, "expand": 2.0, "nt": 2, "diffeo_start": 4, "epV": 1.0}
 IMAGE_ITERS = 12
 
+#: Initial affine for the image comparisons. Deliberately *not* identity, and not a round
+#: angle or an integer shift. Centred pixel axes are integers, so an identity start makes
+#: every interpolation sample land exactly on a grid line -- the degenerate case where
+#: upstream and squidpy can floor() to different neighbours (ledger row D10) and the
+#: comparison measures that rather than the port. The point-cloud fixture avoids this the
+#: same way, via `fixtures.THETA` / `fixtures.SHIFT`.
+IMAGE_THETA = 0.0371449
+IMAGE_SHIFT = (0.41372, -0.28913)
+
+
+def _image_start() -> tuple[np.ndarray, np.ndarray]:
+    c, s = np.cos(IMAGE_THETA), np.sin(IMAGE_THETA)
+    return np.array([[c, -s], [s, c]]), np.array(IMAGE_SHIFT)
+
 
 def _centred_axes(shape: tuple[int, int]) -> list[np.ndarray]:
     """The axes `fit_stalign_image` builds for an image of this shape.
@@ -463,7 +477,8 @@ def _write_image_trajectory_matched(st, clouds: F.Clouds, out: Path) -> None:
     query, ref = query[:, :rows, :cols], ref[:, :rows, :cols]
     x_source = _centred_axes((rows, cols))
 
-    kwargs = dict(xI=x_source, I=query, xJ=list(x_source), J=ref, L=np.eye(2), T=np.zeros(2), **IMAGE_PARAMS)
+    lin, trans = _image_start()
+    kwargs = dict(xI=x_source, I=query, xJ=list(x_source), J=ref, L=lin, T=trans, **IMAGE_PARAMS)
     run = st.LDDMM(niter=IMAGE_ITERS, **kwargs)
     nxt = st.LDDMM(niter=IMAGE_ITERS + 1, **kwargs)
     _, captured = upstream.lddmm_with_grads(st, niter=IMAGE_ITERS, **kwargs)
@@ -471,6 +486,8 @@ def _write_image_trajectory_matched(st, clouds: F.Clouds, out: Path) -> None:
     np.savez_compressed(
         out / "image_trajectory_matched.npz",
         __provenance__=_provenance(section="image_trajectory_matched", niter=IMAGE_ITERS),
+        start_L=lin,
+        start_T=trans,
         axis_0=x_source[0],
         axis_1=x_source[1],
         query=query,
@@ -499,8 +516,8 @@ def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
         I=query,
         xJ=x_target,
         J=ref,
-        L=np.eye(2),
-        T=np.zeros(2),
+        L=_image_start()[0],
+        T=_image_start()[1],
         **{k: v for k, v in IMAGE_PARAMS.items()},
     )
     run = st.LDDMM(niter=IMAGE_ITERS, **kwargs)
@@ -516,6 +533,8 @@ def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
     np.savez_compressed(
         out / "image_trajectory.npz",
         __provenance__=_provenance(section="image_trajectory", niter=IMAGE_ITERS),
+        start_L=_image_start()[0],
+        start_T=_image_start()[1],
         source_axis_0=x_source[0],
         source_axis_1=x_source[1],
         target_axis_0=x_target[0],
