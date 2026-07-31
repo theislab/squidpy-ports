@@ -12,4 +12,7 @@ contributing.md
 references.md
 
 notebooks/example
+notebooks/stalign-xenium-comparison
+notebooks/stalign-merfish-comparison
+notebooks/stalign-visium-affine-comparison
 ```
