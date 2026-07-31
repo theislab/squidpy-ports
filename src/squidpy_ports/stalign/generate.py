@@ -447,6 +447,40 @@ def _centred_axes(shape: tuple[int, int]) -> list[np.ndarray]:
     return [(np.arange(n, dtype=float) - (n - 1) / 2.0) for n in shape]
 
 
+def _write_image_trajectory_matched(st, clouds: F.Clouds, out: Path) -> None:
+    """The same comparison with both images cropped to a common extent.
+
+    The control for `image_trajectory`. There the two rasters have different shapes, and
+    because `fit_stalign_image` centres each on its own centre they end up spanning
+    different domains -- so ~11% of the target grid samples the source through padding,
+    where upstream's `grid_sample` and squidpy's `map_coordinates` agree on values but
+    not on derivatives. Cropping to a shared extent removes the padding entirely, so if
+    this run agrees and the other does not, padding is the cause rather than a suspicion.
+    """
+    (xq, yq, query), (xr, yr, ref) = _rasters(st, clouds)
+    rows = min(query.shape[1], ref.shape[1])
+    cols = min(query.shape[2], ref.shape[2])
+    query, ref = query[:, :rows, :cols], ref[:, :rows, :cols]
+    x_source = _centred_axes((rows, cols))
+
+    kwargs = dict(xI=x_source, I=query, xJ=list(x_source), J=ref, L=np.eye(2), T=np.zeros(2), **IMAGE_PARAMS)
+    run = st.LDDMM(niter=IMAGE_ITERS, **kwargs)
+    nxt = st.LDDMM(niter=IMAGE_ITERS + 1, **kwargs)
+    _, captured = upstream.lddmm_with_grads(st, niter=IMAGE_ITERS, **kwargs)
+
+    np.savez_compressed(
+        out / "image_trajectory_matched.npz",
+        __provenance__=_provenance(section="image_trajectory_matched", niter=IMAGE_ITERS),
+        axis_0=x_source[0],
+        axis_1=x_source[1],
+        query=query,
+        ref=ref,
+        A=nxt["A"].numpy(),
+        v=run["v"].numpy(),
+        energies=np.asarray(captured["E"], dtype=float),
+    )
+
+
 def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
     """Upstream run on the image path's own axes.
 
@@ -518,6 +552,7 @@ def main(argv: list[str] | None = None) -> int:
         ("gradients", _write_gradients),
         ("trajectory", _write_trajectory),
         ("image_trajectory", _write_image_trajectory),
+        ("image_trajectory_matched", _write_image_trajectory_matched),
     ):
         print(f"generating {step}...", flush=True)
         fn(st, clouds, args.out)
