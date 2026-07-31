@@ -430,6 +430,71 @@ def _write_trajectory(st, clouds: F.Clouds, out: Path) -> None:
         np.savez_compressed(out / name, **payload)
 
 
+#: Solver settings for the image path. `fit_stalign_image` works in pixel units, so the
+#: kernel width and velocity step are far smaller than the micron-scale point-cloud
+#: defaults; these are the values the squidpy side passes too.
+IMAGE_PARAMS = {"a": 8.0, "p": 2.0, "expand": 2.0, "nt": 2, "diffeo_start": 4, "epV": 1.0}
+IMAGE_ITERS = 12
+
+
+def _centred_axes(shape: tuple[int, int]) -> list[np.ndarray]:
+    """The axes `fit_stalign_image` builds for an image of this shape.
+
+    Reproduced verbatim from `_stalign.py` rather than imported: this package must not
+    depend on squidpy, or the reference would be defined in terms of the thing it checks.
+    Pixel units, centred so the affine starts near identity.
+    """
+    return [(np.arange(n, dtype=float) - (n - 1) / 2.0) for n in shape]
+
+
+def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
+    """Upstream run on the image path's own axes.
+
+    `fit_stalign_image` is a public entry point with a different coordinate convention
+    from the point-cloud one -- centred pixels rather than physical microns -- so the
+    solver agreeing on rasters says nothing about it until the axes are checked too.
+    The rasters from the point-cloud fixture are reused as the image pair, so nothing in
+    `fixtures.py` changes and its checksum stays stable.
+    """
+    (xq, yq, query), (xr, yr, ref) = _rasters(st, clouds)
+    x_source = _centred_axes(query.shape[1:])
+    x_target = _centred_axes(ref.shape[1:])
+
+    kwargs = dict(
+        xI=x_source,
+        I=query,
+        xJ=x_target,
+        J=ref,
+        L=np.eye(2),
+        T=np.zeros(2),
+        **{k: v for k, v in IMAGE_PARAMS.items()},
+    )
+    run = st.LDDMM(niter=IMAGE_ITERS, **kwargs)
+    nxt = st.LDDMM(niter=IMAGE_ITERS + 1, **kwargs)
+
+    # What `align(by="images", out="images/...")` materialises. Upstream's own composition
+    # of build_transform + interp, rather than reassembling it here.
+    warped = st.transform_image_source_to_target(run["xv"], run["v"], nxt["A"], x_source, query, x_target)
+
+    np.savez_compressed(
+        out / "image_trajectory.npz",
+        __provenance__=_provenance(section="image_trajectory", niter=IMAGE_ITERS),
+        source_axis_0=x_source[0],
+        source_axis_1=x_source[1],
+        target_axis_0=x_target[0],
+        target_axis_1=x_target[1],
+        query=query,
+        ref=ref,
+        A=nxt["A"].numpy(),
+        A_stale=run["A"].numpy(),
+        v=run["v"].numpy(),
+        WM=run["WM"].numpy(),
+        WA=run["WA"].numpy(),
+        WB=run["WB"].numpy(),
+        warped=warped.numpy(),
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Generate the whole bundle."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -446,6 +511,7 @@ def main(argv: list[str] | None = None) -> int:
         ("energy", _write_energy),
         ("gradients", _write_gradients),
         ("trajectory", _write_trajectory),
+        ("image_trajectory", _write_image_trajectory),
     ):
         print(f"generating {step}...", flush=True)
         fn(st, clouds, args.out)
