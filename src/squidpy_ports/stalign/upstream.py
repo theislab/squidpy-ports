@@ -9,6 +9,7 @@ keeps a GPL-3.0 project out of this package's dependency metadata.
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 from functools import cache
 from pathlib import Path
@@ -28,6 +29,26 @@ def vendor_root() -> Path:
     return Path(__file__).resolve().parents[3] / "vendor" / "STalign"
 
 
+def _checkout_sha(root: Path) -> str:
+    """Read the upstream SHA from Git, or from a pre-verified staged-job value."""
+    result = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        return result.stdout.strip()
+
+    staged_sha = os.environ.get("SQUIDPY_PORTS_STALIGN_SHA")
+    if staged_sha:
+        return staged_sha
+    raise RuntimeError(
+        f"cannot verify vendored STalign at {root}: Git metadata is unavailable and "
+        "`SQUIDPY_PORTS_STALIGN_SHA` was not set by the staging job"
+    )
+
+
 @cache
 def load() -> ModuleType:
     """Import the vendored ``STalign.STalign`` module, asserting the pin.
@@ -44,12 +65,7 @@ def load() -> ModuleType:
     if not path.is_file():
         raise FileNotFoundError(f"vendored STalign missing at {path}; run `git submodule update --init`")
 
-    head = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    head = _checkout_sha(root)
     if head != UPSTREAM_SHA:
         raise RuntimeError(
             f"vendored STalign is at {head}, expected {UPSTREAM_SHA}. Re-pin deliberately "

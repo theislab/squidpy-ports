@@ -1,0 +1,624 @@
+"""Replay every upstream STalign notebook and compare its fit with Squidpy."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import inspect
+import io
+import json
+import os
+import platform
+import time
+from contextlib import contextmanager
+from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from . import upstream
+
+NOTEBOOKS = (
+    "heart-alignment-varying-thickness.ipynb",
+    "heart-alignment.ipynb",
+    "merfish-allen3Datlas-alignment.ipynb",
+    "merfish-merfish-alignment-affine-only-with-points.ipynb",
+    "merfish-merfish-alignment-affine-only.ipynb",
+    "merfish-merfish-alignment-simulation.ipynb",
+    "merfish-merfish-alignment-using-L-T.ipynb",
+    "merfish-merfish-alignment.ipynb",
+    "merfish-visium-alignment-with-curve-annotator.ipynb",
+    "merfish-visium-alignment-with-point-annotator.ipynb",
+    "merfish-visium-alignment.ipynb",
+    "merfish-xenium-alignment.ipynb",
+    "starmap-allen3Datlas-alignment.ipynb",
+    "visium-visium-alignment-affine-only.ipynb",
+    "xenium-heimage-alignment.ipynb",
+    "xenium-starmap-alignment.ipynb",
+    "xenium-xenium-alignment.ipynb",
+)
+
+THREE_D_NOTEBOOKS = {
+    "merfish-allen3Datlas-alignment.ipynb",
+    "starmap-allen3Datlas-alignment.ipynb",
+}
+AFFINE_NOTEBOOK = "merfish-merfish-alignment-affine-only-with-points.ipynb"
+UPSTREAM_NOTES = {
+    "merfish-merfish-alignment-using-L-T.ipynb": (
+        "The notebook's second fit uses the stale `A, v, xv = LDDMM(...)` tuple API. "
+        "The suite compares its first complete 10,000-iteration fit."
+    ),
+    "xenium-xenium-alignment.ipynb": (
+        "The two sections overlap only partially. Unmatched cells are expected; the "
+        "matching-weight panels identify the supported overlap."
+    ),
+}
+
+
+@dataclass(slots=True)
+class ComparisonResult:
+    """Evidence emitted for one upstream notebook."""
+
+    notebook: str
+    status: str
+    metrics: dict[str, float]
+    figure: Any
+    upstream_seconds: float = 0.0
+    squidpy_seconds: float = 0.0
+    note: str | None = None
+
+
+class _CapturedCall(Exception):
+    def __init__(self, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+        super().__init__("captured upstream call")
+        self.args_ = args
+        self.kwargs_ = kwargs
+
+
+@contextmanager
+def _working_directory(path: Path):
+    previous = Path.cwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
+def _numpy(value: Any) -> np.ndarray:
+    if hasattr(value, "detach"):
+        value = value.detach().cpu()
+    return np.asarray(value)
+
+
+def _clean_cell(source: str) -> str:
+    lines = []
+    for line in source.splitlines():
+        if line.lstrip().startswith(("%", "!")):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _capture_notebook_call(notebook: str, function: str) -> tuple[tuple[Any, ...], dict[str, Any], dict[str, Any]]:
+    """Execute upstream preprocessing unchanged and stop at the requested fit call."""
+    import matplotlib.pyplot as plt
+
+    st = upstream.load()
+    notebook_path = upstream.vendor_root() / "docs" / "notebooks" / notebook
+    payload = json.loads(notebook_path.read_text())
+    namespace: dict[str, Any] = {
+        "__file__": str(notebook_path),
+        "__name__": "__main__",
+        "STalign": st,
+    }
+    original = getattr(st, function)
+
+    def capture(*args: Any, **kwargs: Any) -> None:
+        raise _CapturedCall(args, kwargs)
+
+    setattr(st, function, capture)
+    try:
+        with _working_directory(notebook_path.parent):
+            for cell_number, cell in enumerate(payload["cells"], start=1):
+                if cell.get("cell_type") != "code":
+                    continue
+                source = "".join(cell.get("source", []))
+                if "import STalign" in source or "from STalign" in source:
+                    continue
+                if "np.savez(" in source or ".to_csv(" in source:
+                    continue
+                cleaned = _clean_cell(source)
+                if not cleaned.strip():
+                    continue
+                try:
+                    exec(compile(cleaned, f"{notebook}:cell-{cell_number}", "exec"), namespace)
+                finally:
+                    plt.close("all")
+    except _CapturedCall as captured:
+        return captured.args_, captured.kwargs_, namespace
+    finally:
+        setattr(st, function, original)
+    raise RuntimeError(f"{notebook}: did not call STalign.{function}")
+
+
+def _relative_l2(actual: np.ndarray, expected: np.ndarray) -> float:
+    denominator = max(float(np.linalg.norm(expected)), np.finfo(float).tiny)
+    return float(np.linalg.norm(actual - expected) / denominator)
+
+
+def _unit_peak(image: np.ndarray) -> np.ndarray:
+    array = np.asarray(image, dtype=float)
+    return array / max(float(np.max(np.abs(array))), np.finfo(float).tiny)
+
+
+def _scalar_image(image: np.ndarray) -> np.ndarray:
+    array = np.asarray(image)
+    if array.ndim == 2:
+        return array
+    return np.mean(array, axis=0)
+
+
+def _point_cloud(namespace: dict[str, Any], suffix: str) -> np.ndarray | None:
+    x, y = namespace.get(f"x{suffix}"), namespace.get(f"y{suffix}")
+    if x is None or y is None:
+        return None
+    x_array, y_array = _numpy(x), _numpy(y)
+    if x_array.ndim != 1 or y_array.ndim != 1 or x_array.shape != y_array.shape or x_array.size < 20:
+        return None
+    return np.stack((x_array, y_array), axis=1)
+
+
+def _sample_points(namespace: dict[str, Any], source_axes: tuple[np.ndarray, np.ndarray]) -> np.ndarray:
+    source = _point_cloud(namespace, "I")
+    if source is not None:
+        if len(source) <= 20_000:
+            return source
+        rng = np.random.default_rng(0)
+        return source[np.sort(rng.choice(len(source), 20_000, replace=False))]
+    rows = np.linspace(source_axes[0][0], source_axes[0][-1], 45)
+    cols = np.linspace(source_axes[1][0], source_axes[1][-1], 45)
+    yy, xx = np.meshgrid(rows, cols, indexing="ij")
+    return np.stack((xx.ravel(), yy.ravel()), axis=1)
+
+
+def _extent(axes: tuple[np.ndarray, np.ndarray]) -> tuple[float, float, float, float]:
+    row_step, col_step = axes[0][1] - axes[0][0], axes[1][1] - axes[1][0]
+    return (
+        float(axes[1][0] - col_step / 2),
+        float(axes[1][-1] + col_step / 2),
+        float(axes[0][-1] + row_step / 2),
+        float(axes[0][0] - row_step / 2),
+    )
+
+
+def _jax_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    from squidpy.experimental.methods.align_samples._stalign_impl._core import lddmm
+
+    accepted = set(inspect.signature(lddmm).parameters)
+    converted = {key: _numpy(value) for key, value in kwargs.items() if key in accepted and key not in {"L", "T"}}
+    if kwargs.get("A") is not None:
+        affine = _numpy(kwargs["A"])
+        converted["L"], converted["T"] = affine[:2, :2], affine[:2, 2]
+    else:
+        converted["L"] = _numpy(kwargs.get("L", np.eye(2)))
+        converted["T"] = _numpy(kwargs.get("T", np.zeros(2)))
+    if kwargs.get("pointsI") is not None:
+        converted["points_source"] = _numpy(kwargs["pointsI"])
+        converted["points_target"] = _numpy(kwargs["pointsJ"])
+    if kwargs.get("v") is not None:
+        converted["initial_velocity"] = _numpy(kwargs["v"])
+        converted["velocity_grid"] = tuple(_numpy(axis) for axis in kwargs["xv"])
+    return converted
+
+
+def _plot_comparison(
+    notebook: str,
+    target: np.ndarray,
+    target_axes: tuple[np.ndarray, np.ndarray],
+    upstream_warped: np.ndarray,
+    squidpy_warped: np.ndarray,
+    upstream_points: np.ndarray,
+    squidpy_points: np.ndarray,
+    target_points: np.ndarray | None,
+    upstream_weights: np.ndarray,
+    squidpy_weights: np.ndarray,
+):
+    import matplotlib.pyplot as plt
+
+    extent = _extent(target_axes)
+    upstream_scalar = _unit_peak(_scalar_image(upstream_warped))
+    squidpy_scalar = _unit_peak(_scalar_image(squidpy_warped))
+    density_difference = np.abs(upstream_scalar - squidpy_scalar)
+    point_delta = np.linalg.norm(upstream_points - squidpy_points, axis=1)
+
+    fig, axes = plt.subplots(2, 4, figsize=(20, 9.5), constrained_layout=True)
+    panels = (
+        (upstream_scalar, "upstream warped source", "magma"),
+        (squidpy_scalar, "Squidpy warped source", "magma"),
+        (density_difference, "absolute density difference", "viridis"),
+        (_unit_peak(_scalar_image(target)), "fixed target", "magma"),
+    )
+    for ax, (image, title, cmap) in zip(axes[0], panels, strict=True):
+        artist = ax.imshow(image, extent=extent, cmap=cmap)
+        ax.set(title=title, xlabel="x", ylabel="y")
+        fig.colorbar(artist, ax=ax, shrink=0.72)
+
+    for ax, points, title in zip(
+        axes[1, :2],
+        (upstream_points, squidpy_points),
+        ("upstream aligned source", "Squidpy aligned source"),
+        strict=True,
+    ):
+        if target_points is not None:
+            fixed = target_points
+            if len(fixed) > 20_000:
+                fixed = fixed[np.linspace(0, len(fixed) - 1, 20_000, dtype=int)]
+            ax.scatter(fixed[:, 0], fixed[:, 1], s=1, alpha=0.12, label="fixed")
+        else:
+            ax.imshow(_unit_peak(_scalar_image(target)), extent=extent, cmap="Greys", alpha=0.35)
+        ax.scatter(points[:, 0], points[:, 1], s=2, alpha=0.22, label="aligned source")
+        ax.set(title=title, xlabel="x", ylabel="y", aspect="equal")
+    axes[1, 0].legend(markerscale=5, frameon=False)
+
+    delta_artist = axes[1, 2].scatter(upstream_points[:, 0], upstream_points[:, 1], c=point_delta, s=3, cmap="viridis")
+    axes[1, 2].set(title="pointwise |upstream − Squidpy|", xlabel="x", ylabel="y", aspect="equal")
+    fig.colorbar(delta_artist, ax=axes[1, 2], label="distance", shrink=0.72)
+
+    weight_difference = np.abs(np.asarray(upstream_weights) - np.asarray(squidpy_weights))
+    weight_artist = axes[1, 3].imshow(weight_difference, extent=extent, cmap="viridis")
+    axes[1, 3].set(title="absolute matching-weight difference", xlabel="x", ylabel="y")
+    fig.colorbar(weight_artist, ax=axes[1, 3], shrink=0.72)
+
+    note = UPSTREAM_NOTES.get(notebook)
+    title = f"STalign notebook parity — {notebook}"
+    if note:
+        title += f"\n{note}"
+    fig.suptitle(title, fontsize=13)
+    return fig, upstream_scalar, squidpy_scalar, point_delta, weight_difference
+
+
+def _compare_lddmm(notebook: str) -> ComparisonResult:
+    import jax
+    import jax.numpy as jnp
+    import matplotlib.pyplot as plt
+    import torch
+    from squidpy.experimental.methods.align_samples import StalignResult
+    from squidpy.experimental.methods.align_samples._stalign_impl._core import lddmm
+
+    args, kwargs, namespace = _capture_notebook_call(notebook, "LDDMM")
+    source_axes = tuple(_numpy(axis) for axis in args[0])
+    source_image = _numpy(args[1])
+    target_axes = tuple(_numpy(axis) for axis in args[2])
+    target_image = _numpy(args[3])
+
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    upstream_kwargs = dict(kwargs)
+    upstream_kwargs["device"] = device
+    for key in ("muA", "muB"):
+        if upstream_kwargs.get(key) is not None:
+            upstream_kwargs[key] = torch.as_tensor(upstream_kwargs[key], device=device, dtype=torch.float64)
+    torch.set_default_dtype(torch.float64)
+
+    st = upstream.load()
+    started = time.monotonic()
+    upstream_fit = st.LDDMM(*args, **upstream_kwargs)
+    upstream_seconds = time.monotonic() - started
+    plt.close("all")
+
+    upstream_warped = _numpy(
+        st.transform_image_source_to_target(
+            upstream_fit["xv"],
+            upstream_fit["v"],
+            upstream_fit["A"],
+            [torch.as_tensor(axis, device=device, dtype=torch.float64) for axis in args[0]],
+            torch.as_tensor(args[1], device=device, dtype=torch.float64),
+            [torch.as_tensor(axis, device=device, dtype=torch.float64) for axis in args[2]],
+        )
+    )
+    sample_xy = _sample_points(namespace, source_axes)
+    sample_rc = np.ascontiguousarray(sample_xy[:, ::-1])
+    upstream_points = _numpy(
+        st.transform_points_source_to_target(
+            upstream_fit["xv"],
+            upstream_fit["v"],
+            upstream_fit["A"],
+            torch.as_tensor(sample_rc, device=device, dtype=torch.float64),
+        )
+    )[:, ::-1]
+    upstream_weights = _numpy(upstream_fit["WM"])
+
+    jax.block_until_ready(jnp.asarray(0.0))
+    started = time.monotonic()
+    jax_fit = lddmm(source_axes, source_image, target_axes, target_image, **_jax_kwargs(kwargs))
+    jax.block_until_ready(jax_fit["A"])
+    squidpy_seconds = time.monotonic() - started
+    result = StalignResult(
+        affine=jax_fit["A"],
+        velocity=jax_fit["v"],
+        velocity_grid=jax_fit["xv"],
+        aligned_points=jnp.zeros((0, 2)),
+        query_axes=source_axes,
+        ref_axes=target_axes,
+        match_weights=jax_fit["WM"],
+        artifact_weights=jax_fit["WA"],
+        background_weights=jax_fit["WB"],
+        energies=jax_fit["energies"],
+        n_iter=int(jax_fit["n_iter"]),
+    )
+    squidpy_warped = _numpy(result.warp_image(source_image))
+    squidpy_points = _numpy(result.transform(sample_xy))
+    squidpy_weights = _numpy(jax_fit["WM"])
+    target_points = _point_cloud(namespace, "J")
+
+    figure, upstream_scalar, squidpy_scalar, point_delta, weight_difference = _plot_comparison(
+        notebook,
+        target_image,
+        target_axes,
+        upstream_warped,
+        squidpy_warped,
+        upstream_points,
+        squidpy_points,
+        target_points,
+        upstream_weights,
+        squidpy_weights,
+    )
+    metrics = {
+        "warped density relative L2": _relative_l2(squidpy_scalar, upstream_scalar),
+        "aligned points relative L2": _relative_l2(squidpy_points, upstream_points),
+        "aligned points median |delta|": float(np.median(point_delta)),
+        "aligned points p95 |delta|": float(np.quantile(point_delta, 0.95)),
+        "matching weights relative L2": _relative_l2(squidpy_weights, upstream_weights),
+        "matching weights max |delta|": float(np.max(weight_difference)),
+    }
+    return ComparisonResult(
+        notebook=notebook,
+        status="compared",
+        metrics=metrics,
+        figure=figure,
+        upstream_seconds=upstream_seconds,
+        squidpy_seconds=squidpy_seconds,
+        note=UPSTREAM_NOTES.get(notebook),
+    )
+
+
+def _compare_affine(notebook: str) -> ComparisonResult:
+    import matplotlib.pyplot as plt
+    from squidpy.experimental.methods.align_samples._stalign_impl._helpers import affine_from_points
+
+    args, _, _ = _capture_notebook_call(notebook, "L_T_from_points")
+    source, target = _numpy(args[0]), _numpy(args[1])
+    st = upstream.load()
+    upstream_linear, upstream_translation = st.L_T_from_points(source, target)
+    squidpy_linear, squidpy_translation = affine_from_points(source, target)
+    upstream_aligned = source @ upstream_linear.T + upstream_translation
+    squidpy_aligned = source @ np.asarray(squidpy_linear).T + np.asarray(squidpy_translation)
+    delta = np.linalg.norm(upstream_aligned - squidpy_aligned, axis=1)
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5), constrained_layout=True)
+    for ax, aligned, title in zip(
+        axes[:2],
+        (upstream_aligned, squidpy_aligned),
+        ("upstream affine landmarks", "Squidpy affine landmarks"),
+        strict=True,
+    ):
+        ax.scatter(target[:, 1], target[:, 0], s=45, label="target")
+        ax.scatter(aligned[:, 1], aligned[:, 0], s=30, label="aligned source")
+        ax.set(title=title, xlabel="x", ylabel="y", aspect="equal")
+    axes[0].legend(frameon=False)
+    artist = axes[2].scatter(upstream_aligned[:, 1], upstream_aligned[:, 0], c=delta, s=50, cmap="viridis")
+    axes[2].set(title="landmark |upstream − Squidpy|", xlabel="x", ylabel="y", aspect="equal")
+    fig.colorbar(artist, ax=axes[2], label="distance")
+    fig.suptitle(f"STalign notebook parity — {notebook}")
+    metrics = {
+        "affine linear relative L2": _relative_l2(np.asarray(squidpy_linear), upstream_linear),
+        "affine translation relative L2": _relative_l2(np.asarray(squidpy_translation), upstream_translation),
+        "aligned landmarks median |delta|": float(np.median(delta)),
+        "upstream landmark residual": float(np.linalg.norm(upstream_aligned - target)),
+        "squidpy landmark residual": float(np.linalg.norm(squidpy_aligned - target)),
+    }
+    return ComparisonResult(notebook, "compared-affine", metrics, fig)
+
+
+def _three_d_status(notebook: str) -> ComparisonResult:
+    import matplotlib.pyplot as plt
+
+    note = (
+        "Not numerically compared: this upstream notebook calls LDDMM_3D_to_slice. "
+        "Squidpy currently implements the 2D LDDMM solver only; a separate volume-to-image "
+        "estimator is required for an honest comparison."
+    )
+    fig, ax = plt.subplots(figsize=(11, 4.5), constrained_layout=True)
+    ax.axis("off")
+    ax.text(0.5, 0.62, notebook, ha="center", va="center", fontsize=15, weight="bold")
+    ax.text(0.5, 0.38, note, ha="center", va="center", fontsize=11, wrap=True)
+    return ComparisonResult(notebook, "unsupported-3d", {}, fig, note=note)
+
+
+def compare_notebook(notebook: str) -> ComparisonResult:
+    """Replay and compare one notebook from the pinned upstream checkout."""
+    if notebook not in NOTEBOOKS:
+        raise ValueError(f"Unknown upstream notebook {notebook!r}.")
+    if notebook in THREE_D_NOTEBOOKS:
+        return _three_d_status(notebook)
+    if notebook == AFFINE_NOTEBOOK:
+        return _compare_affine(notebook)
+    return _compare_lddmm(notebook)
+
+
+def _package_version(name: str) -> str | None:
+    try:
+        return version(name)
+    except PackageNotFoundError:
+        return None
+
+
+def write_result(result: ComparisonResult, output_dir: Path) -> None:
+    """Persist a comparison figure, metrics, and provenance manifest."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(result.notebook).stem
+    image_path = output_dir / f"{stem}-comparison.png"
+    result.figure.savefig(image_path, dpi=180, bbox_inches="tight")
+    (output_dir / f"{stem}-metrics.json").write_text(json.dumps(result.metrics, indent=2, sort_keys=True) + "\n")
+    manifest = {
+        "notebook": result.notebook,
+        "status": result.status,
+        "note": result.note,
+        "upstream_seconds": result.upstream_seconds,
+        "squidpy_seconds": result.squidpy_seconds,
+        "upstream_sha": upstream.UPSTREAM_SHA,
+        "host": platform.node(),
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "python": platform.python_version(),
+        "packages": {name: _package_version(name) for name in ("squidpy", "squidpy-ports", "jax", "jaxlib", "torch")},
+    }
+    (output_dir / f"{stem}-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+    image_buffer = io.BytesIO()
+    result.figure.savefig(image_buffer, format="png", dpi=180, bbox_inches="tight")
+    image_data = base64.b64encode(image_buffer.getvalue()).decode("ascii")
+    upstream_url = f"{upstream.UPSTREAM_URL}/blob/{upstream.UPSTREAM_SHA}/docs/notebooks/{result.notebook}"
+    executed = {
+        "cells": [
+            {
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": [
+                    f"# STalign parity: `{result.notebook}`\n",
+                    "\n",
+                    f"Executed one-to-one replay of [the pinned upstream notebook]({upstream_url}).\n",
+                    "\n",
+                    f"Status: `{result.status}`. {result.note or ''}\n",
+                ],
+            },
+            {
+                "cell_type": "code",
+                "execution_count": 1,
+                "metadata": {},
+                "outputs": [
+                    {
+                        "data": {
+                            "application/json": result.metrics,
+                            "text/plain": [json.dumps(result.metrics, indent=2, sort_keys=True)],
+                        },
+                        "execution_count": 1,
+                        "metadata": {},
+                        "output_type": "execute_result",
+                    }
+                ],
+                "source": [
+                    "from squidpy_ports.stalign.notebook_suite import compare_notebook\n",
+                    f"result = compare_notebook({result.notebook!r})\n",
+                    "result.metrics\n",
+                ],
+            },
+            {
+                "cell_type": "code",
+                "execution_count": 2,
+                "metadata": {},
+                "outputs": [
+                    {
+                        "data": {"image/png": image_data, "text/plain": ["<STalign parity comparison figure>"]},
+                        "metadata": {},
+                        "output_type": "display_data",
+                    }
+                ],
+                "source": ["result.figure\n"],
+            },
+        ],
+        "metadata": {
+            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            "language_info": {"name": "python", "version": platform.python_version()},
+            "stalign_comparison": manifest,
+        },
+        "nbformat": 4,
+        "nbformat_minor": 5,
+    }
+    notebook_dir = output_dir / "notebooks"
+    notebook_dir.mkdir(exist_ok=True)
+    (notebook_dir / result.notebook).write_text(json.dumps(executed, indent=1) + "\n")
+
+
+def write_notebook_wrappers(output_dir: Path) -> None:
+    """Generate the one-to-one notebook map used by the documentation."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for notebook in NOTEBOOKS:
+        upstream_url = f"{upstream.UPSTREAM_URL}/blob/{upstream.UPSTREAM_SHA}/docs/notebooks/{notebook}"
+        payload = {
+            "cells": [
+                {
+                    "cell_type": "markdown",
+                    "metadata": {},
+                    "source": [
+                        f"# STalign parity: `{notebook}`\n",
+                        "\n",
+                        f"One-to-one replay of [the pinned upstream notebook]({upstream_url}). ",
+                        "Its preprocessing and fit arguments are executed directly from the vendored notebook; ",
+                        "the captured fit is then run with upstream PyTorch and Squidpy JAX.\n",
+                    ],
+                },
+                {
+                    "cell_type": "code",
+                    "execution_count": None,
+                    "metadata": {},
+                    "outputs": [],
+                    "source": [
+                        "from squidpy_ports.stalign.notebook_suite import compare_notebook\n",
+                        f"result = compare_notebook({notebook!r})\n",
+                        "result.metrics\n",
+                    ],
+                },
+                {
+                    "cell_type": "code",
+                    "execution_count": None,
+                    "metadata": {},
+                    "outputs": [],
+                    "source": ["result.figure\n"],
+                },
+            ],
+            "metadata": {
+                "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+                "language_info": {"name": "python", "version": "3.13"},
+            },
+            "nbformat": 4,
+            "nbformat_minor": 5,
+        }
+        (output_dir / notebook).write_text(json.dumps(payload, indent=1) + "\n")
+
+
+def main() -> None:
+    """Run one or every mapped upstream notebook."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("notebook", choices=(*NOTEBOOKS, "all"))
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(os.environ.get("STALIGN_COMPARISON_OUTPUT", "comparison-results")),
+    )
+    args = parser.parse_args()
+
+    selected = NOTEBOOKS if args.notebook == "all" else (args.notebook,)
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    failures: dict[str, str] = {}
+    for index, notebook in enumerate(selected, start=1):
+        print(f"### notebook {index}/{len(selected)}: {notebook}", flush=True)
+        try:
+            result = compare_notebook(notebook)
+            write_result(result, args.output_dir)
+            print(
+                f"### {notebook}: {result.status}; upstream={result.upstream_seconds:.1f}s "
+                f"squidpy={result.squidpy_seconds:.1f}s",
+                flush=True,
+            )
+        except Exception as error:  # noqa: BLE001 - batch suite must preserve later evidence
+            failures[notebook] = f"{type(error).__name__}: {error}"
+            print(f"### {notebook}: FAILED: {failures[notebook]}", flush=True)
+    (args.output_dir / "suite-status.json").write_text(json.dumps(failures, indent=2, sort_keys=True) + "\n")
+    if failures:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

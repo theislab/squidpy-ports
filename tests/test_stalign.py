@@ -13,11 +13,32 @@ import pytest
 
 from squidpy_ports.stalign import fixtures as F
 from squidpy_ports.stalign import upstream
+from squidpy_ports.stalign.notebook_suite import NOTEBOOKS, THREE_D_NOTEBOOKS, write_notebook_wrappers
 
 
 def test_vendored_upstream_is_pinned(stalign):
     assert hasattr(stalign, "LDDMM")
     assert hasattr(stalign, "rasterize")
+
+
+def test_staged_checkout_uses_preverified_sha(monkeypatch, tmp_path):
+    """Scratch staging may omit Git metadata but must carry a verified source SHA."""
+    failed = upstream.subprocess.CompletedProcess([], returncode=128, stdout="", stderr="not a repository")
+    monkeypatch.setattr(upstream.subprocess, "run", lambda *args, **kwargs: failed)
+    monkeypatch.setenv("SQUIDPY_PORTS_STALIGN_SHA", upstream.UPSTREAM_SHA)
+
+    assert upstream._checkout_sha(tmp_path) == upstream.UPSTREAM_SHA
+
+
+def test_notebook_suite_maps_every_upstream_notebook():
+    found = {path.name for path in (upstream.vendor_root() / "docs" / "notebooks").glob("*.ipynb")}
+    assert set(NOTEBOOKS) == found
+    assert len(THREE_D_NOTEBOOKS) == 2
+
+
+def test_notebook_wrappers_are_one_to_one(tmp_path):
+    write_notebook_wrappers(tmp_path)
+    assert {path.name for path in tmp_path.glob("*.ipynb")} == set(NOTEBOOKS)
 
 
 def test_clouds_are_deterministic():
