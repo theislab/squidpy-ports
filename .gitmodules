@@ -1,0 +1,3 @@
+[submodule "vendor/STalign"]
+	path = vendor/STalign
+	url = https://github.com/JEFworks-Lab/STalign.git

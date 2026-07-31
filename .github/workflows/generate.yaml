@@ -1,0 +1,59 @@
+name: Generate reference bundle
+
+# Produces the .npz bundle that squidpy commits under tests/_data/stalign_reference/.
+#
+# This runs on ubuntu on purpose. Upstream is bit-reproducible on CPU in float64 once
+# thread counts are pinned, but BLAS/FFT reduction order still differs between macOS
+# Accelerate and Linux OpenBLAS. squidpy's scheduled job compares on ubuntu, so the
+# committed fixtures must be generated there rather than on a developer laptop.
+on:
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    env:
+      MKL_NUM_THREADS: "1"
+      MPLBACKEND: agg
+      OMP_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Generate
+        run: |
+          uv sync --frozen
+          uv run python -m squidpy_ports.stalign.generate --out bundle
+
+      - name: Check the run is reproducible
+        run: |
+          uv run python -m squidpy_ports.stalign.generate --out bundle-again
+          uv run python - <<'PY'
+          import glob, json, os, sys
+          import numpy as np
+
+          bad = []
+          for path in sorted(glob.glob("bundle/*.npz")):
+              a, b = np.load(path), np.load(f"bundle-again/{os.path.basename(path)}")
+              for key in a.files:
+                  if key == "__provenance__":
+                      pa, pb = json.loads(str(a[key])), json.loads(str(b[key]))
+                      pa.pop("generated_utc"), pb.pop("generated_utc")
+                      if pa != pb:
+                          bad.append(f"{path}:{key}")
+                  elif not np.array_equal(a[key], b[key]):
+                      bad.append(f"{path}:{key}")
+          if bad:
+              sys.exit("not reproducible: " + ", ".join(bad))
+          print("bit-identical across runs")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stalign-reference-bundle
+          path: bundle/

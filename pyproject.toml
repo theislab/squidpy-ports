@@ -14,16 +14,29 @@ maintainers = [
 authors = [
   { name = "Selman Ozleyen" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
+# Upstream STalign is vendored (vendor/STalign), never pip-installed: its setup.py
+# reads requirements.txt verbatim and pins numpy==1.23.4 / torch==2.0.0 / Pillow==9.5.0,
+# none of which have cp312+ wheels. Vendoring makes those pins irrelevant; uv.lock
+# supplies the reproducibility instead, and the resolved versions are recorded in the
+# provenance blob stamped onto every generated .npz.
 dependencies = [
-  "anndata",
+  # STalign.py imports all of these unconditionally at module level.
+  "matplotlib",
+  "numpy",
+  "pandas",
+  "plotly",
+  "pynrrd",
+  "requests",
+  "scikit-image",
+  "scipy",
+  "tornado",
+  "torch",
   # for debug logging (referenced from the issue template)
   "session-info2",
 ]
@@ -67,18 +80,27 @@ scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
 scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 scripts.clean = "git clean -fdX -- {args:docs}"
 
-# Test the lowest and highest supported Python versions with normal deps
+# A single cell on purpose. This repo only ever runs a vendored torch model to emit
+# fixtures; fanning that across Pythons costs CI minutes and buys nothing, and
+# cross-platform BLAS/FFT reduction order would change the numbers we are pinning.
 [[tool.hatch.envs.hatch-test.matrix]]
 deps = [ "stable" ]
-python = [ "3.10", "3.13" ]
-
-# Test the newest supported Python version also with pre-release deps
-[[tool.hatch.envs.hatch-test.matrix]]
-deps = [ "pre" ]
 python = [ "3.13" ]
 
 [tool.hatch.envs.hatch-test]
 features = [ "dev", "test" ]
+
+# Emit the reference bundle consumed by squidpy's tests/_data/stalign_reference/.
+[tool.hatch.envs.generate]
+installer = "uv"
+scripts.run = "python -m squidpy_ports.stalign.generate {args}"
+
+[tool.hatch.envs.generate.env-vars]
+# Determinism: single-threaded BLAS/FFT so reduction order is fixed, and a
+# non-interactive matplotlib backend because upstream LDDMM draws unconditionally.
+MKL_NUM_THREADS = "1"
+MPLBACKEND = "agg"
+OMP_NUM_THREADS = "1"
 
 [tool.hatch.envs.hatch-test.overrides]
 # If the matrix variable `deps` is set to "pre",
@@ -91,6 +113,9 @@ matrix.deps.env-vars = [
 line-length = 120
 src = [ "src" ]
 extend-include = [ "*.ipynb" ]
+# Never lint or format the vendored GPL-3.0 upstream: it must stay byte-identical to
+# the pinned commit, otherwise it is no longer the reference we claim to compare against.
+extend-exclude = [ "vendor" ]
 
 format.docstring-code-format = true
 
@@ -144,6 +169,7 @@ omit = [
 [tool.cruft]
 skip = [
   "tests",
+  "vendor",
   "src/**/__init__.py",
   "src/**/basic.py",
   "docs/api.md",

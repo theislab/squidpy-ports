@@ -1,7 +1,7 @@
 from importlib.metadata import version
 
-from . import pl, pp, tl
+from . import stalign
 
-__all__ = ["pl", "pp", "tl"]
+__all__ = ["stalign"]
 
 __version__ = version("squidpy-ports")
