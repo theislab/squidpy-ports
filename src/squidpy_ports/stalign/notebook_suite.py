@@ -9,7 +9,11 @@ import io
 import json
 import os
 import platform
+import re
+import tempfile
 import time
+import traceback
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
@@ -45,6 +49,28 @@ THREE_D_NOTEBOOKS = {
     "starmap-allen3Datlas-alignment.ipynb",
 }
 AFFINE_NOTEBOOK = "merfish-merfish-alignment-affine-only-with-points.ipynb"
+
+#: Resolution of the standalone PNG panel: archival, kept with the run's evidence.
+ARCHIVE_DPI = 180
+#: Resolution of the copy embedded in the executed notebook. Lower on purpose -- these
+#: notebooks are committed and rendered by the documentation, and a 20x9.5in panel at
+#: `ARCHIVE_DPI` base64s to ~2 MB, so a full suite would add ~32 MB to the repository on
+#: every rerun. The numbers live in the metrics JSON; the embedded panel only has to be
+#: legible on a docs page.
+EMBED_DPI = 100
+
+#: Notebooks that do not run at the pinned upstream commit, with the evidence that this is
+#: upstream's state rather than something this replay breaks. Reproducing an upstream
+#: failure is the honest outcome; inventing a comparison around it would not be.
+UNREPLAYABLE_NOTEBOOKS = {
+    "merfish-visium-alignment-with-curve-annotator.ipynb": (
+        "Not compared: this notebook does not run at the pinned upstream commit. Its two "
+        "saved curve files hold 10 and 15 vertices, so the `L_T_from_points` call raises "
+        "`Number of pointsI (10) is not equal to number of pointsJ (15)` -- and upstream's "
+        "own committed output for that cell records the same exception. The replay "
+        "reproduces an upstream defect; there is no fit to compare."
+    ),
+}
 UPSTREAM_NOTES = {
     "merfish-merfish-alignment-using-L-T.ipynb": (
         "The notebook's second fit uses the stale `A, v, xv = LDDMM(...)` tuple API. "
@@ -78,13 +104,35 @@ class _CapturedCall(Exception):
 
 
 @contextmanager
-def _working_directory(path: Path):
+def _replay_directory(notebook_path: Path):
+    """A scratch working directory in which upstream's relative data paths resolve.
+
+    Upstream notebooks read their data as ``../<name>_data/...``, relative to
+    ``docs/notebooks``. ``merfish-xenium-alignment.ipynb`` is the one exception: it reaches
+    a level further up (``../../merfish_data/...``) for files that live at the same place as
+    everyone else's, so from its own directory those paths do not exist.
+
+    Rather than edit the vendored checkout -- which has to stay byte-identical to the pinned
+    commit -- the replay runs two levels below a scratch root that carries a symlink to
+    every data directory at *both* depths, so either convention reaches the real data. This
+    also keeps anything a notebook writes out of the vendored tree.
+    """
+    data_root = notebook_path.parent.parent
+    data_dirs = sorted(path for path in data_root.iterdir() if path.is_dir() and path.name.endswith("_data"))
     previous = Path.cwd()
-    os.chdir(path)
-    try:
-        yield
-    finally:
-        os.chdir(previous)
+    with tempfile.TemporaryDirectory(prefix="stalign-replay-") as scratch:
+        root = Path(scratch)
+        inner = root / data_root.name
+        work = inner / notebook_path.parent.name
+        work.mkdir(parents=True)
+        for level in (root, inner):
+            for data in data_dirs:
+                (level / data.name).symlink_to(data)
+        os.chdir(work)
+        try:
+            yield work
+        finally:
+            os.chdir(previous)
 
 
 def _numpy(value: Any) -> np.ndarray:
@@ -93,10 +141,24 @@ def _numpy(value: Any) -> np.ndarray:
     return np.asarray(value)
 
 
+#: Upstream is imported by path and pre-seeded into the replay namespace already patched,
+#: so the notebook's own import of it must not run -- a plain `import STalign` would find
+#: the package on `sys.path` and silently replace the patched module, losing the capture.
+_STALIGN_IMPORT = re.compile(r"^\s*(import\s+STalign\b|from\s+STalign\s+import\b)")
+
+
 def _clean_cell(source: str) -> str:
+    """Strip what cannot be replayed from one notebook cell, and nothing else.
+
+    Only the shell/magic lines and upstream's own import are dropped. Dropping the *cell*
+    instead would take the rest of it with them: several notebooks put `import pandas as
+    pd` (and numpy, torch, matplotlib) in the same cell as `import STalign`, so a
+    cell-level skip left the whole notebook without pandas and failed several cells later
+    with a bare `NameError`.
+    """
     lines = []
     for line in source.splitlines():
-        if line.lstrip().startswith(("%", "!")):
+        if line.lstrip().startswith(("%", "!")) or _STALIGN_IMPORT.match(line):
             continue
         lines.append(line)
     return "\n".join(lines)
@@ -121,13 +183,11 @@ def _capture_notebook_call(notebook: str, function: str) -> tuple[tuple[Any, ...
 
     setattr(st, function, capture)
     try:
-        with _working_directory(notebook_path.parent):
+        with _replay_directory(notebook_path):
             for cell_number, cell in enumerate(payload["cells"], start=1):
                 if cell.get("cell_type") != "code":
                     continue
                 source = "".join(cell.get("source", []))
-                if "import STalign" in source or "from STalign" in source:
-                    continue
                 if "np.savez(" in source or ".to_csv(" in source:
                     continue
                 cleaned = _clean_cell(source)
@@ -194,17 +254,55 @@ def _extent(axes: tuple[np.ndarray, np.ndarray]) -> tuple[float, float, float, f
     )
 
 
-def _jax_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
-    from squidpy.experimental.methods.align_samples._stalign_impl._core import lddmm
+def _rank(value: Any) -> int:
+    """Number of dimensions, without forcing a device transfer on a CUDA tensor."""
+    ndim = getattr(value, "ndim", None)
+    return int(ndim) if ndim is not None else int(np.ndim(value))
 
-    accepted = set(inspect.signature(lddmm).parameters)
-    converted = {key: _numpy(value) for key, value in kwargs.items() if key in accepted and key not in {"L", "T"}}
+
+def _cast_like(value: Any, default: Any, *, name: str) -> Any:
+    """Convert one captured upstream argument to the type the port declares for it.
+
+    The cast is read from the port's own default rather than from a list kept here, so
+    the two cannot drift apart silently. It matters because ``lddmm`` passes its scalar
+    arguments (``niter``, ``diffeo_start``, the step sizes, the sigmas) to ``jax.jit`` as
+    *static* arguments: JAX hashes those, and a 0-D NumPy array is unhashable, so a
+    blanket ``np.asarray`` turns every scalar upstream passes into a trace-time
+    ``ValueError``. Array arguments (``muA``/``muB``, landmarks, warm-start velocities)
+    must stay arrays.
+    """
+    for python_type in (bool, int, float):
+        if isinstance(default, python_type):
+            if _rank(value) != 0:
+                raise TypeError(f"upstream passed a rank-{_rank(value)} value for scalar argument {name!r}")
+            return python_type(_numpy(value).item())
+    # `tol`-style parameters declare `None` but are still hashed when supplied.
+    if default is None and not isinstance(value, str) and _rank(value) == 0:
+        return float(_numpy(value).item())
+    return _numpy(value)
+
+
+def _convert_kwargs(kwargs: dict[str, Any], parameters: Mapping[str, inspect.Parameter]) -> dict[str, Any]:
+    """Map captured upstream ``LDDMM`` keywords onto the port's ``lddmm`` signature.
+
+    Keywords upstream accepts but the port does not express (``device``, ``dtype``) are
+    dropped; the ones it renames (``A``/``L``/``T``, ``pointsI``/``pointsJ``, ``v``/``xv``)
+    are translated explicitly. Everything else is cast by :func:`_cast_like`.
+    """
+    renamed = {"A", "L", "T", "pointsI", "pointsJ", "v", "xv"}
+    converted = {
+        key: _cast_like(value, parameters[key].default, name=key)
+        for key, value in kwargs.items()
+        if key in parameters and key not in renamed and value is not None
+    }
     if kwargs.get("A") is not None:
         affine = _numpy(kwargs["A"])
         converted["L"], converted["T"] = affine[:2, :2], affine[:2, 2]
     else:
-        converted["L"] = _numpy(kwargs.get("L", np.eye(2)))
-        converted["T"] = _numpy(kwargs.get("T", np.zeros(2)))
+        # Upstream defaults both to `None`, meaning identity.
+        linear, translation = kwargs.get("L"), kwargs.get("T")
+        converted["L"] = np.eye(2) if linear is None else _numpy(linear)
+        converted["T"] = np.zeros(2) if translation is None else _numpy(translation)
     if kwargs.get("pointsI") is not None:
         converted["points_source"] = _numpy(kwargs["pointsI"])
         converted["points_target"] = _numpy(kwargs["pointsJ"])
@@ -212,6 +310,17 @@ def _jax_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
         converted["initial_velocity"] = _numpy(kwargs["v"])
         converted["velocity_grid"] = tuple(_numpy(axis) for axis in kwargs["xv"])
     return converted
+
+
+def jax_parameters() -> Mapping[str, inspect.Parameter]:
+    """The port's ``lddmm`` signature, resolved at call time so imports stay optional."""
+    from squidpy.experimental.methods.align_samples._stalign_impl._core import lddmm
+
+    return inspect.signature(lddmm).parameters
+
+
+def _jax_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    return _convert_kwargs(kwargs, jax_parameters())
 
 
 def _plot_comparison(
@@ -422,25 +531,47 @@ def _compare_affine(notebook: str) -> ComparisonResult:
     return ComparisonResult(notebook, "compared-affine", metrics, fig)
 
 
-def _three_d_status(notebook: str) -> ComparisonResult:
+def _status_panel(notebook: str, status: str, note: str) -> ComparisonResult:
+    """Emit a panel that says why a notebook carries no numbers, instead of no evidence."""
     import matplotlib.pyplot as plt
 
-    note = (
-        "Not numerically compared: this upstream notebook calls LDDMM_3D_to_slice. "
-        "Squidpy currently implements the 2D LDDMM solver only; a separate volume-to-image "
-        "estimator is required for an honest comparison."
-    )
     fig, ax = plt.subplots(figsize=(11, 4.5), constrained_layout=True)
     ax.axis("off")
     ax.text(0.5, 0.62, notebook, ha="center", va="center", fontsize=15, weight="bold")
     ax.text(0.5, 0.38, note, ha="center", va="center", fontsize=11, wrap=True)
-    return ComparisonResult(notebook, "unsupported-3d", {}, fig, note=note)
+    return ComparisonResult(notebook, status, {}, fig, note=note)
+
+
+def _three_d_status(notebook: str) -> ComparisonResult:
+    return _status_panel(
+        notebook,
+        "unsupported-3d",
+        "Not numerically compared: this upstream notebook calls LDDMM_3D_to_slice. "
+        "Squidpy currently implements the 2D LDDMM solver only; a separate volume-to-image "
+        "estimator is required for an honest comparison.",
+    )
+
+
+def notebook_for_index(index: int) -> str:
+    """Resolve a Slurm array task id to the notebook it is responsible for.
+
+    Raises
+    ------
+    IndexError
+        If the array was submitted with a wider range than there are notebooks -- better
+        a named failure than a task that silently compares the wrong notebook.
+    """
+    if not 0 <= index < len(NOTEBOOKS):
+        raise IndexError(f"notebook index {index} is outside 0-{len(NOTEBOOKS) - 1}")
+    return NOTEBOOKS[index]
 
 
 def compare_notebook(notebook: str) -> ComparisonResult:
     """Replay and compare one notebook from the pinned upstream checkout."""
     if notebook not in NOTEBOOKS:
         raise ValueError(f"Unknown upstream notebook {notebook!r}.")
+    if notebook in UNREPLAYABLE_NOTEBOOKS:
+        return _status_panel(notebook, "unreplayable-upstream", UNREPLAYABLE_NOTEBOOKS[notebook])
     if notebook in THREE_D_NOTEBOOKS:
         return _three_d_status(notebook)
     if notebook == AFFINE_NOTEBOOK:
@@ -455,47 +586,103 @@ def _package_version(name: str) -> str | None:
         return None
 
 
-def write_result(result: ComparisonResult, output_dir: Path) -> None:
-    """Persist a comparison figure, metrics, and provenance manifest."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    stem = Path(result.notebook).stem
-    image_path = output_dir / f"{stem}-comparison.png"
-    result.figure.savefig(image_path, dpi=180, bbox_inches="tight")
-    (output_dir / f"{stem}-metrics.json").write_text(json.dumps(result.metrics, indent=2, sort_keys=True) + "\n")
-    manifest = {
-        "notebook": result.notebook,
-        "status": result.status,
-        "note": result.note,
-        "upstream_seconds": result.upstream_seconds,
-        "squidpy_seconds": result.squidpy_seconds,
+def _manifest(
+    notebook: str,
+    status: str,
+    note: str | None,
+    upstream_seconds: float = 0.0,
+    squidpy_seconds: float = 0.0,
+) -> dict[str, Any]:
+    return {
+        "notebook": notebook,
+        "status": status,
+        "note": note,
+        "upstream_seconds": upstream_seconds,
+        "squidpy_seconds": squidpy_seconds,
         "upstream_sha": upstream.UPSTREAM_SHA,
         "host": platform.node(),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "python": platform.python_version(),
         "packages": {name: _package_version(name) for name in ("squidpy", "squidpy-ports", "jax", "jaxlib", "torch")},
     }
+
+
+def _header_cell(notebook: str, status: str, note: str | None) -> dict[str, Any]:
+    upstream_url = f"{upstream.UPSTREAM_URL}/blob/{upstream.UPSTREAM_SHA}/docs/notebooks/{notebook}"
+    return {
+        "cell_type": "markdown",
+        # nbformat 4.5 requires a cell id; a fixed one keeps re-runs diffable.
+        "id": "header",
+        "metadata": {},
+        "source": [
+            f"# STalign parity: `{notebook}`\n",
+            "\n",
+            f"Executed one-to-one replay of [the pinned upstream notebook]({upstream_url}).\n",
+            "\n",
+            f"Status: `{status}`. {note or ''}\n",
+        ],
+    }
+
+
+def _compare_source(notebook: str, tail: str) -> list[str]:
+    return [
+        "from squidpy_ports.stalign.notebook_suite import compare_notebook\n",
+        f"result = compare_notebook({notebook!r})\n",
+        tail,
+    ]
+
+
+def _embedded_panel(figure: Any) -> str:
+    """Base64 PNG of the panel, sized for a documentation page rather than for an archive.
+
+    The executed notebooks are committed and rendered by the docs, so their embedded copy is
+    what drives repository size: a 20x9.5in panel at :data:`ARCHIVE_DPI` base64s to ~2 MB, so
+    a 17-notebook suite would add ~32 MB per rerun. Dropping to :data:`EMBED_DPI` and a
+    256-colour palette cuts that ~6x with no visible difference on these plots, while the
+    full-resolution PNG stays beside the notebook in the run's evidence.
+    """
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    figure.savefig(buffer, format="png", dpi=EMBED_DPI, bbox_inches="tight")
+    buffer.seek(0)
+    panel = Image.open(buffer).convert("RGB")
+    reduced = panel.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    encoded = io.BytesIO()
+    reduced.save(encoded, format="PNG", optimize=True)
+    return base64.b64encode(encoded.getvalue()).decode("ascii")
+
+
+def _write_notebook(payload: dict[str, Any], manifest: dict[str, Any], output_dir: Path) -> None:
+    payload["metadata"] = {
+        "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+        "language_info": {"name": "python", "version": platform.python_version()},
+        "stalign_comparison": manifest,
+    }
+    payload["nbformat"], payload["nbformat_minor"] = 4, 5
+    notebook_dir = output_dir / "notebooks"
+    notebook_dir.mkdir(parents=True, exist_ok=True)
+    (notebook_dir / manifest["notebook"]).write_text(json.dumps(payload, indent=1) + "\n")
+
+
+def write_result(result: ComparisonResult, output_dir: Path) -> None:
+    """Persist a comparison figure, metrics, and provenance manifest."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(result.notebook).stem
+    image_path = output_dir / f"{stem}-comparison.png"
+    result.figure.savefig(image_path, dpi=ARCHIVE_DPI, bbox_inches="tight")
+    (output_dir / f"{stem}-metrics.json").write_text(json.dumps(result.metrics, indent=2, sort_keys=True) + "\n")
+    manifest = _manifest(result.notebook, result.status, result.note, result.upstream_seconds, result.squidpy_seconds)
     (output_dir / f"{stem}-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
-    image_buffer = io.BytesIO()
-    result.figure.savefig(image_buffer, format="png", dpi=180, bbox_inches="tight")
-    image_data = base64.b64encode(image_buffer.getvalue()).decode("ascii")
-    upstream_url = f"{upstream.UPSTREAM_URL}/blob/{upstream.UPSTREAM_SHA}/docs/notebooks/{result.notebook}"
+    image_data = _embedded_panel(result.figure)
     executed = {
         "cells": [
-            {
-                "cell_type": "markdown",
-                "metadata": {},
-                "source": [
-                    f"# STalign parity: `{result.notebook}`\n",
-                    "\n",
-                    f"Executed one-to-one replay of [the pinned upstream notebook]({upstream_url}).\n",
-                    "\n",
-                    f"Status: `{result.status}`. {result.note or ''}\n",
-                ],
-            },
+            _header_cell(result.notebook, result.status, result.note),
             {
                 "cell_type": "code",
                 "execution_count": 1,
+                "id": "metrics",
                 "metadata": {},
                 "outputs": [
                     {
@@ -508,15 +695,12 @@ def write_result(result: ComparisonResult, output_dir: Path) -> None:
                         "output_type": "execute_result",
                     }
                 ],
-                "source": [
-                    "from squidpy_ports.stalign.notebook_suite import compare_notebook\n",
-                    f"result = compare_notebook({result.notebook!r})\n",
-                    "result.metrics\n",
-                ],
+                "source": _compare_source(result.notebook, "result.metrics\n"),
             },
             {
                 "cell_type": "code",
                 "execution_count": 2,
+                "id": "figure",
                 "metadata": {},
                 "outputs": [
                     {
@@ -527,18 +711,46 @@ def write_result(result: ComparisonResult, output_dir: Path) -> None:
                 ],
                 "source": ["result.figure\n"],
             },
-        ],
-        "metadata": {
-            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
-            "language_info": {"name": "python", "version": platform.python_version()},
-            "stalign_comparison": manifest,
-        },
-        "nbformat": 4,
-        "nbformat_minor": 5,
+        ]
     }
-    notebook_dir = output_dir / "notebooks"
-    notebook_dir.mkdir(exist_ok=True)
-    (notebook_dir / result.notebook).write_text(json.dumps(executed, indent=1) + "\n")
+    _write_notebook(executed, manifest, output_dir)
+
+
+def write_failure(notebook: str, error: BaseException, output_dir: Path) -> None:
+    """Persist the full traceback of a failed comparison, as text and as a notebook.
+
+    A batch run that dies part way through still has to explain itself. Without this a
+    partial result directory holds evidence only for the notebooks that succeeded, and
+    the failures survive as the one-line exception message in the suite log -- which is
+    lost entirely if the allocation is killed before the log is copied back.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(notebook).stem
+    formatted = traceback.format_exception(type(error), error, error.__traceback__)
+    (output_dir / f"{stem}-traceback.txt").write_text("".join(formatted))
+    manifest = _manifest(notebook, "failed", f"{type(error).__name__}: {error}")
+    (output_dir / f"{stem}-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    payload = {
+        "cells": [
+            _header_cell(notebook, "failed", manifest["note"]),
+            {
+                "cell_type": "code",
+                "execution_count": 1,
+                "id": "traceback",
+                "metadata": {},
+                "outputs": [
+                    {
+                        "output_type": "error",
+                        "ename": type(error).__name__,
+                        "evalue": str(error),
+                        "traceback": "".join(formatted).splitlines(),
+                    }
+                ],
+                "source": _compare_source(notebook, "result.metrics\n"),
+            },
+        ]
+    }
+    _write_notebook(payload, manifest, output_dir)
 
 
 def write_notebook_wrappers(output_dir: Path) -> None:
@@ -550,6 +762,7 @@ def write_notebook_wrappers(output_dir: Path) -> None:
             "cells": [
                 {
                     "cell_type": "markdown",
+                    "id": "header",
                     "metadata": {},
                     "source": [
                         f"# STalign parity: `{notebook}`\n",
@@ -562,17 +775,15 @@ def write_notebook_wrappers(output_dir: Path) -> None:
                 {
                     "cell_type": "code",
                     "execution_count": None,
+                    "id": "metrics",
                     "metadata": {},
                     "outputs": [],
-                    "source": [
-                        "from squidpy_ports.stalign.notebook_suite import compare_notebook\n",
-                        f"result = compare_notebook({notebook!r})\n",
-                        "result.metrics\n",
-                    ],
+                    "source": _compare_source(notebook, "result.metrics\n"),
                 },
                 {
                     "cell_type": "code",
                     "execution_count": None,
+                    "id": "figure",
                     "metadata": {},
                     "outputs": [],
                     "source": ["result.figure\n"],
@@ -591,7 +802,11 @@ def write_notebook_wrappers(output_dir: Path) -> None:
 def main() -> None:
     """Run one or every mapped upstream notebook."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("notebook", choices=(*NOTEBOOKS, "all"))
+    selection = parser.add_mutually_exclusive_group(required=True)
+    selection.add_argument("notebook", nargs="?", choices=(*NOTEBOOKS, "all"))
+    # One Slurm array task per notebook: the task id is the only thing the batch script
+    # knows, and resolving it here keeps `NOTEBOOKS` the single source of that ordering.
+    selection.add_argument("--index", type=int, help=f"select one notebook by position, 0-{len(NOTEBOOKS) - 1}")
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -599,23 +814,49 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    selected = NOTEBOOKS if args.notebook == "all" else (args.notebook,)
+    if args.index is not None:
+        selected = (notebook_for_index(args.index),)
+    else:
+        selected = NOTEBOOKS if args.notebook == "all" else (args.notebook,)
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    # Array tasks share one output directory, so the status file is named after what this
+    # process is responsible for rather than after the suite as a whole.
+    status_name = "suite-status.json" if len(selected) > 1 else f"{Path(selected[0]).stem}-status.json"
+    status_path = args.output_dir / status_name
+    statuses: dict[str, str] = dict.fromkeys(selected, "not-reached")
     failures: dict[str, str] = {}
+
+    def record() -> None:
+        # Rewritten after every notebook: a killed allocation must still leave behind
+        # which notebooks ran, which failed, and which were never reached.
+        status_path.write_text(
+            json.dumps({"statuses": statuses, "failures": failures}, indent=2, sort_keys=True) + "\n"
+        )
+
+    record()
     for index, notebook in enumerate(selected, start=1):
         print(f"### notebook {index}/{len(selected)}: {notebook}", flush=True)
+        statuses[notebook] = "running"
+        record()
         try:
             result = compare_notebook(notebook)
             write_result(result, args.output_dir)
+            statuses[notebook] = result.status
             print(
                 f"### {notebook}: {result.status}; upstream={result.upstream_seconds:.1f}s "
                 f"squidpy={result.squidpy_seconds:.1f}s",
                 flush=True,
             )
         except Exception as error:  # noqa: BLE001 - batch suite must preserve later evidence
+            statuses[notebook] = "failed"
             failures[notebook] = f"{type(error).__name__}: {error}"
             print(f"### {notebook}: FAILED: {failures[notebook]}", flush=True)
-    (args.output_dir / "suite-status.json").write_text(json.dumps(failures, indent=2, sort_keys=True) + "\n")
+            traceback.print_exception(type(error), error, error.__traceback__)
+            try:
+                write_failure(notebook, error, args.output_dir)
+            except OSError as write_error:  # evidence for one notebook is not worth the rest
+                print(f"### {notebook}: could not write failure evidence: {write_error}", flush=True)
+        record()
     if failures:
         raise SystemExit(1)
 

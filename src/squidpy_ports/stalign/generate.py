@@ -518,7 +518,7 @@ def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
         J=ref,
         L=_image_start()[0],
         T=_image_start()[1],
-        **{k: v for k, v in IMAGE_PARAMS.items()},
+        **IMAGE_PARAMS,
     )
     run = st.LDDMM(niter=IMAGE_ITERS, **kwargs)
     nxt = st.LDDMM(niter=IMAGE_ITERS + 1, **kwargs)
