@@ -10,7 +10,12 @@ repos:
     rev: v2.2.4
     hooks:
       - id: biome-format
-        exclude: ^\.cruft\.json$ # inconsistent indentation with cruft - file never to be modified manually.
+        # .cruft.json: inconsistent indentation with cruft - file never to be modified manually.
+        # *.ipynb: biome reformats notebook JSON and re-emits every float literal from its own
+        # parse. That changed a recorded comparison result by one ULP
+        # (1.1311371582589875e-06 -> ...77e-06, 0x...aa4p-20 -> 0x...aa5p-20). These notebooks
+        # are evidence; a formatter must not round-trip the numbers in them.
+        exclude: ^(\.cruft\.json|.*\.ipynb)$
   - repo: https://github.com/tox-dev/pyproject-fmt
     rev: v2.6.0
     hooks:

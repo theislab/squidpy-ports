@@ -3,38 +3,125 @@
 The comparison harness covers all 17 notebooks from upstream STalign at
 `b2068edc98974efa54537eca194736e177bbe11d`. It runs the original preprocessing,
 captures the upstream fit inputs, and compares the PyTorch result with Squidpy's
-JAX implementation on one H100 allocation.
+JAX implementation on H100 GPUs -- one Slurm array task per notebook.
 
-## Results preserved from job 38938878
+## Complete suite, job array 38957316
 
-- [3D Allen atlas status notebook](notebooks/stalign-upstream/results-partial-38938878/notebooks/merfish-allen3Datlas-alignment.ipynb)
-  and [status image](notebooks/stalign-upstream/results-partial-38938878/merfish-allen3Datlas-alignment-comparison.png).
-- [Affine landmark comparison notebook](notebooks/stalign-upstream/results-partial-38938878/notebooks/merfish-merfish-alignment-affine-only-with-points.ipynb)
-  and [comparison image](notebooks/stalign-upstream/results-partial-38938878/merfish-merfish-alignment-affine-only-with-points-comparison.png).
-- The affine comparison recorded a linear relative L2 difference of
-  `0.0034826`, translation relative L2 difference of `0.0037152`, and median
-  aligned-landmark delta of `7.0977` coordinate units.
-- The result directory also contains package versions, H100 details, GPU
-  monitoring, manifests, metrics, and the partial suite log.
+Every notebook has executed evidence: the notebooks in this directory *are* the executed
+comparisons, and [`results-38957316/`](notebooks/stalign-upstream/results-38957316) holds
+their metrics, manifests, per-notebook status, and package versions. Full-resolution PNG
+panels and GPU monitoring stay on cluster storage under
+`stalign-full-suite/source-20260731-019fb8c6/squidpy-ports/cluster-results/38957316`; the
+notebooks embed a web-resolution copy of the same panel.
+
+| notebook | status | warped density | aligned points | matching weights |
+| --- | --- | --- | --- | --- |
+| `visium-visium-alignment-affine-only` | compared | 1.71e-07 | 3.61e-08 | 0 |
+| `merfish-merfish-alignment` | compared | 2.07e-06 | 2.38e-07 | 3.32e-19 |
+| `merfish-xenium-alignment` | compared | 9.49e-06 | 4.51e-07 | 1.09e-18 |
+| `merfish-merfish-alignment-using-L-T` | compared | 1.13e-05 | 3.84e-07 | 2.88e-19 |
+| `heart-alignment-varying-thickness` | compared | 1.48e-05 | 8.33e-07 | 6.79e-16 |
+| `heart-alignment` | compared | 2.03e-05 | 1.13e-06 | 1.94e-16 |
+| `merfish-merfish-alignment-simulation` | compared | 3.71e-05 | 1.57e-06 | 1.89e-19 |
+| `merfish-merfish-alignment-affine-only` | compared | 4.39e-05 | 2.83e-06 | 3.33e-19 |
+| `xenium-starmap-alignment` | compared | 7.52e-05 | 3.44e-06 | 7.81e-16 |
+| `xenium-xenium-alignment` | compared | 1.29e-04 | 7.55e-06 | 6.80e-16 |
+| `merfish-visium-alignment` | compared | 3.83e-04 | 1.38e-05 | 1.99e-06 |
+| `merfish-visium-alignment-with-point-annotator` | compared | 5.80e-04 | 2.70e-05 | 1.28e-05 |
+| `xenium-heimage-alignment` | compared | **1.88e-01** | 7.80e-03 | 6.13e-02 |
+| `merfish-merfish-alignment-affine-only-with-points` | compared-affine | see below | | |
+| `merfish-visium-alignment-with-curve-annotator` | unreplayable-upstream | — | — | — |
+| `merfish-allen3Datlas-alignment` | unsupported-3d | — | — | — |
+| `starmap-allen3Datlas-alignment` | unsupported-3d | — | — | — |
+
+All figures are relative L2 against the upstream PyTorch result. The port is 7-34x faster
+per fit (for example 707.5s to 8.9s on `merfish-merfish-alignment`).
+
+**Run-to-run noise floor: ~1e-12 relative.** Rerunning `heart-alignment-varying-thickness`
+unchanged on a different H100 reproduced its metrics to 12 significant digits, two of them
+bit-identical. Divergences at 1e-5 are therefore real but tiny; the `xenium-heimage` result
+is not arithmetic noise.
+
+The affine landmark comparison recorded a linear relative L2 difference of `0.0034826207`,
+translation relative L2 of `0.0037151724`, and a median aligned-landmark delta of `7.0977`
+coordinate units -- reproducing the earlier partial job 38938878 to every recorded digit
+(that partial result directory has been removed, superseded by this complete run).
 
 ## TODO
 
-- [ ] Preserve Python scalar types in `notebook_suite._jax_kwargs`. The current
-  generic conversion turns static arguments such as `niter=100` into 0-D NumPy
-  arrays, which JAX cannot hash as static JIT arguments.
-- [ ] Add a regression test for captured scalar, array, affine, point, fixed
-  `muA`/`muB`, and warm-start velocity arguments before another cluster run.
-- [ ] Emit a failure notebook and full traceback for every failed comparison so
-  a partial cluster run remains self-explanatory.
-- [ ] Rerun all 14 two-dimensional LDDMM notebooks in the single `gpu_normal`
-  H100 batch job and commit their executed notebooks, PNGs, metrics, and
-  manifests.
+- [x] Preserve Python scalar types in `notebook_suite._jax_kwargs`. Every captured
+  argument is now cast to the type the port declares for that parameter, so `niter=100`
+  and `diffeo_start=100` stay Python `int`s that `jax.jit` can hash as static arguments,
+  while `muA`/`muB`, the landmarks, and a warm-start velocity stay arrays. Reading the
+  cast from the port's own signature keeps the two from drifting apart silently.
+- [x] Add a regression test for captured scalar, array, affine, point, fixed
+  `muA`/`muB`, and warm-start velocity arguments before another cluster run. The port's
+  signature is mirrored in `tests/test_stalign.py` so the conversion is testable where
+  squidpy and JAX are absent, and `test_port_signature_matches_the_mirror` checks the
+  mirror against the real signature wherever they are installed.
+- [x] Emit a failure notebook and full traceback for every failed comparison so
+  a partial cluster run remains self-explanatory. Each failure now writes
+  `<notebook>-traceback.txt`, a manifest with `status: failed`, and a notebook carrying
+  the traceback as an `error` output; `suite-status.json` is rewritten after every
+  notebook, so a killed allocation still records what ran, what failed, and what was
+  never reached.
+- [x] Rerun all 14 two-dimensional LDDMM notebooks in the `gpu_normal` H100 job and commit
+  their executed notebooks, metrics, and manifests. Run as a 17-task array (one notebook
+  per task) rather than one serial job: the sweep is ~51,000 upstream iterations, and one
+  hung notebook would otherwise spend the whole allocation. Reruns of a subset are
+  `sbatch --array=<indices>`.
 - [ ] Review numerical divergence notebook by notebook, with particular
   attention to the partially overlapping Xenium/Xenium sections and matching
-  weights rather than plot orientation alone.
-- [ ] Expose and implement a separate 3D-volume-to-2D-slice estimator before
-  numerically comparing `merfish-allen3Datlas-alignment.ipynb` and
-  `starmap-allen3Datlas-alignment.ipynb`; the current Squidpy port only supports
-  two-dimensional LDDMM.
-- [ ] Replace the generated wrapper notebooks with the final executed versions
-  after the complete suite succeeds.
+  weights rather than plot orientation alone. See "Divergence review" below --
+  `xenium-heimage-alignment` is the one open question.
+- [x] Replace the generated wrapper notebooks with the final executed versions
+  after the complete suite succeeds. The panel embedded in each notebook is
+  web-resolution (`EMBED_DPI`, 256 colours) while the archival PNG beside it stays at
+  `ARCHIVE_DPI`; emitting the suite at archival resolution added ~32 MB per rerun.
+
+## Divergence review
+
+Ten of the thirteen compared notebooks agree with upstream to 1e-5 or better on warped
+density and 1e-6 on aligned points, with matching weights at machine precision
+(1e-16..1e-19). Against a measured ~1e-12 noise floor these are real but negligible.
+
+`xenium-xenium-alignment` was called out for review because its two sections overlap only
+partially. It lands at 1.29e-04 density with matching weights at 6.80e-16 -- machine
+precision. Since the weights are what identify the supported overlap, the partial overlap
+is being handled identically by both implementations, and the density figure reflects
+unmatched cells rather than a disagreement.
+
+`merfish-visium-alignment` (3.83e-04) and `merfish-visium-alignment-with-point-annotator`
+(5.80e-04) are the next largest. Both set all three mixture sigmas to ~0.18-0.2, where the
+E-step exponent carries a factor `1/(2*sigma^2)` of ~15 and the three-component posterior
+is close to degenerate, so the weights are ill-conditioned by construction.
+
+`xenium-heimage-alignment` is the outlier and remains open: 1.88e-01 density, 7.80e-03
+points, and 6.13e-02 matching weights, with a maximum weight difference of 0.78 -- at some
+pixels the two implementations assign opposite mixture classes. The pointwise panel shows a
+smooth spatial gradient of 20-80 coordinate units over a ~8000-unit domain, the signature of
+a slightly different transform rather than noise. What has been ruled out:
+
+- **Not the mixture E step.** The affine divergence is already 3.9e-04 at iteration 49,
+  before the E step first runs at iteration 50 (`MIXTURE_E_STEP_START`).
+- **Not the landmark term.** Refitting with `pointsI`/`pointsJ` removed leaves it unchanged
+  (6.89e-04 against 3.93e-04 at iteration 49). An apparent correlation across notebooks
+  between "passes landmarks" and "diverges more" is therefore confounding, not causal.
+- **Not a mean-estimation or cadence difference.** This is the only notebook fixing both
+  `muA` and `muB`, but `estimate_muA`/`estimate_muB` gate only the mean M step in the port,
+  not the E step, and the every-fifth-iteration cadence and `(2*pi*sigma^2)^(C/2)`
+  normaliser both match upstream.
+
+What is established is that the divergence accumulates from early iterations rather than
+appearing at one step: machine precision at iteration 1, ~4e-04 by iteration 49. The
+velocity field is the remaining suspect and needs a comparison that accounts for upstream
+returning `A` one iteration behind `v` and `WM`.
+
+## Not planned
+
+`merfish-allen3Datlas-alignment.ipynb` and `starmap-allen3Datlas-alignment.ipynb` call
+upstream's `LDDMM_3D_to_slice`, a separate volume-to-slice solver. Squidpy's port
+implements two-dimensional LDDMM only, and porting the 3D estimator is out of scope for
+this comparison. Both notebooks therefore stay at status `unsupported-3d` permanently:
+the suite emits an explicit status panel for each rather than a number that would imply
+a comparison it did not make.

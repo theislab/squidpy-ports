@@ -435,6 +435,39 @@ def test_cli_rejects_selecting_nothing():
     assert "one of the arguments" in completed.stderr
 
 
+def test_committed_notebooks_report_their_recorded_metrics():
+    """Every committed comparison notebook must still carry the numbers its run produced.
+
+    These notebooks are evidence, and JSON formatters re-emit float literals from their own
+    parse: biome's pre-commit hook silently moved `1.1311371582589875e-06` to `...77e-06`
+    (one ULP) while reformatting them, which is precisely the kind of quiet drift this
+    repository exists to make impossible. Notebooks are excluded from that hook now; this
+    fails if anything reintroduces it.
+    """
+    docs = Path(__file__).resolve().parents[1] / "docs" / "notebooks" / "stalign-upstream"
+    results = docs / "results-38957316"
+    if not results.is_dir():
+        pytest.skip("no committed comparison results")
+
+    checked = 0
+    for metrics_path in sorted(results.glob("*-metrics.json")):
+        recorded = json.loads(metrics_path.read_text())
+        if not recorded:
+            continue  # status-panel notebooks carry no metrics
+        notebook = docs / (metrics_path.name.removesuffix("-metrics.json") + ".ipynb")
+        payload = json.loads(notebook.read_text())
+        embedded = [
+            output["data"]["application/json"]
+            for cell in payload["cells"]
+            for output in cell.get("outputs", [])
+            if "application/json" in output.get("data", {})
+        ]
+        assert embedded, f"{notebook.name} carries no metrics output"
+        assert embedded[0] == recorded, f"{notebook.name} disagrees with {metrics_path.name}"
+        checked += 1
+    assert checked >= 12, f"expected the compared notebooks to be checked, only saw {checked}"
+
+
 def test_written_evidence_keeps_the_notebook_lighter_than_the_archive(tmp_path):
     """The committed notebook carries a web-resolution panel; the PNG beside it stays archival.
 
