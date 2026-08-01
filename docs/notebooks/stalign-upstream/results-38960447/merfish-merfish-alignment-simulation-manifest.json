@@ -1,0 +1,18 @@
+{
+    "host": "supergpu25.scidom.de",
+    "note": "Both passes skipped 4 cell(s) unrelated to the fit -- cell 27: TypeError: can't convert cuda:0 device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.; cell 29: NameError: name 'xI_LDDMM' is not defined; cell 31: NameError: name 'xI_LDDMM' is not defined; cell 33: TypeError: got an unexpected keyword argument 'squared'",
+    "notebook": "merfish-merfish-alignment-simulation.ipynb",
+    "packages": {
+        "jax": "0.11.0",
+        "jaxlib": "0.11.0",
+        "squidpy": "1.8.3.dev0",
+        "squidpy-ports": "0.0.1",
+        "torch": "2.13.0"
+    },
+    "python": "3.13.14",
+    "slurm_job_id": "38960453",
+    "squidpy_seconds": 3.3084794096648693,
+    "status": "compared",
+    "upstream_seconds": 55.48748514428735,
+    "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
+}

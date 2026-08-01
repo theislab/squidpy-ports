@@ -354,6 +354,12 @@ def test_replay_keeps_a_cells_own_imports(stalign):
     assert "import numpy as np" in cleaned
     assert "STalign" not in cleaned
 
+    # `merfish-merfish-alignment-using-L-T.ipynb` cell 38. A reload that worked would restore
+    # the real `LDDMM` mid-notebook, leaving the Squidpy pass comparing upstream to itself.
+    reloaded = _clean_cell("import importlib\nimportlib.reload(STalign)\nkeep = 1\n")
+    assert "reload" not in reloaded
+    assert "keep = 1" in reloaded
+
     # The replay namespace pre-seeds the patched module, so the dropped import is not needed.
     namespace: dict[str, Any] = {"STalign": stalign}
     exec(compile(cleaned, "<cell>", "exec"), namespace)
@@ -383,6 +389,79 @@ def test_replay_directory_resolves_both_upstream_path_depths():
         # Writes land in scratch, not in the vendored GPL checkout.
         assert upstream.vendor_root().resolve() not in Path(os.getcwd()).resolve().parents
     assert os.getcwd() == outside
+
+
+def test_fit_result_supports_every_api_the_notebooks_use():
+    """All three ways the pinned notebooks read a fit result have to work.
+
+    13 notebooks use `out['A']`, `merfish-merfish-alignment-simulation` uses `out[0]`, and
+    `merfish-merfish-alignment-using-L-T` unpacks `A, v, xv = LDDMM(...)`. Upstream returns a
+    plain dict, so the last two raise against the pinned commit and the replay would stop
+    before the notebook's own plots -- which are the whole point of the comparison.
+    """
+    from squidpy_ports.stalign.notebook_suite import _FitResult
+
+    result = _FitResult(A=np.eye(3), v=np.zeros((3, 2, 2, 2)), xv=(np.arange(2.0), np.arange(2.0)), WM=np.ones((2, 2)))
+
+    linear, velocity, grid = result  # `A, v, xv = LDDMM(...)`
+    np.testing.assert_array_equal(linear, np.eye(3))
+    assert velocity.shape == (3, 2, 2, 2)
+    assert len(grid) == 2
+
+    np.testing.assert_array_equal(result[0], np.eye(3))  # `out[0]`
+    assert result[1].shape == (3, 2, 2, 2)
+    assert len(result[2]) == 2
+
+    np.testing.assert_array_equal(result["A"], np.eye(3))  # `out['A']`
+    assert set(result.keys()) == {"A", "v", "xv", "WM"}
+    assert dict(result)["WM"].shape == (2, 2)
+
+
+def test_renamed_helpers_resolve_and_are_still_renames(stalign):
+    """The old `atlas` spellings must reach the new functions, and only because they are renames.
+
+    `merfish-merfish-alignment-simulation.ipynb` calls `transform_points_atlas_to_target`,
+    which upstream renamed in `5837b03` ("change atlas to source"). Aliasing is faithful only
+    while the new name is genuinely the same function, so both halves are asserted.
+    """
+    from squidpy_ports.stalign.notebook_suite import _RENAMED_HELPERS, _UpstreamProxy
+
+    proxy = _UpstreamProxy(stalign)
+    for old, new in _RENAMED_HELPERS.items():
+        assert not hasattr(stalign, old), f"upstream grew {old} back; the alias now hides it"
+        assert hasattr(stalign, new), f"upstream no longer has {new}"
+        assert getattr(proxy, old) is getattr(stalign, new)
+
+    # Anything not renamed still resolves straight through, including the patched fit.
+    assert proxy.LDDMM is stalign.LDDMM
+    assert proxy.rasterize is stalign.rasterize
+
+
+def test_replay_uses_the_notebooks_own_variables_for_metrics():
+    """Metrics are named after what the notebook computed, not after quantities invented here."""
+    from squidpy_ports.stalign.notebook_suite import _namespace_metrics
+
+    upstream_ns = {
+        "phiI": np.ones((4, 4)),
+        "tpointsI": np.arange(8.0).reshape(4, 2),
+        "I": np.zeros((4, 4)),  # an input, shared by both passes
+        "_hidden": np.ones(9),
+        "note": "not an array",
+        "small": np.ones(2),
+    }
+    squidpy_ns = {
+        "phiI": np.ones((4, 4)) * 1.01,
+        "tpointsI": np.arange(8.0).reshape(4, 2),
+        "I": np.ones((4, 4)),
+        "_hidden": np.zeros(9),
+        "note": "also not an array",
+        "small": np.zeros(2),
+    }
+
+    metrics = _namespace_metrics(upstream_ns, squidpy_ns)
+    assert set(metrics) == {"phiI relative L2", "tpointsI relative L2"}
+    assert metrics["phiI relative L2"] == pytest.approx(0.01, rel=1e-6)
+    assert metrics["tpointsI relative L2"] == 0.0
 
 
 def test_index_maps_array_task_ids_onto_notebooks():
@@ -488,7 +567,7 @@ def test_written_evidence_keeps_the_notebook_lighter_than_the_archive(tmp_path):
     figure, ax = plt.subplots(figsize=(20, 9.5))
     rng = np.random.default_rng(0)
     ax.imshow(rng.random((400, 900)), cmap="magma")  # noisy, so PNG cannot trivially compress it
-    result = ComparisonResult("heart-alignment.ipynb", "compared", {"warped density relative L2": 1.5e-05}, figure)
+    result = ComparisonResult("heart-alignment.ipynb", "compared", {"phiI relative L2": 1.5e-05}, [figure])
 
     write_result(result, tmp_path)
     plt.close(figure)
@@ -498,9 +577,10 @@ def test_written_evidence_keeps_the_notebook_lighter_than_the_archive(tmp_path):
     embedded = base64.b64decode(payload["cells"][2]["outputs"][0]["data"]["image/png"])
     assert len(embedded) < archive, f"embedded {len(embedded)} should undercut archival {archive}"
 
+    # Both are cropped by `bbox_inches="tight"`, so compare their ratio, not absolute widths.
     panel = Image.open(io.BytesIO(embedded))
-    assert panel.width == pytest.approx(20 * EMBED_DPI, rel=0.1)
-    assert Image.open(tmp_path / "heart-alignment-comparison.png").width == pytest.approx(20 * ARCHIVE_DPI, rel=0.1)
+    archival = Image.open(tmp_path / "heart-alignment-comparison.png")
+    assert panel.width == pytest.approx(archival.width * EMBED_DPI / ARCHIVE_DPI, rel=0.05)
     assert json.loads((tmp_path / "heart-alignment-metrics.json").read_text()) == result.metrics
 
 

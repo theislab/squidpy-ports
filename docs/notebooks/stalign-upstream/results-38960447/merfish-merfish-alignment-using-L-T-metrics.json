@@ -1,0 +1,20 @@
+{
+    "A relative L2": 0.0,
+    "AI relative L2": 0.0,
+    "L relative L2": 0.0,
+    "extentI relative L2": 0.0,
+    "extentJ relative L2": 0.0,
+    "levels relative L2": 0.0,
+    "phi relative L2": 5.289809229150516e-7,
+    "phiI relative L2": 1.1191575146694763e-5,
+    "phii relative L2": 4.6784411317517205e-7,
+    "phiiJ relative L2": 1.2683542838215957e-5,
+    "source_L relative L2": 0.0,
+    "tpointsI relative L2": 4.6152925924412134e-7,
+    "xI_L relative L2": 0.0,
+    "xI_LDDMM relative L2": 2.669952518320691e-7,
+    "xI_L_T relative L2": 0.0,
+    "yI_L relative L2": 0.0,
+    "yI_LDDMM relative L2": 5.877015044782997e-7,
+    "yI_L_T relative L2": 0.0
+}

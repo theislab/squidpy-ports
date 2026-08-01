@@ -1,0 +1,18 @@
+{
+    "host": "supergpu25.scidom.de",
+    "note": "Both passes skipped 10 cell(s) unrelated to the fit -- cell 26: TypeError: can't convert cuda:0 device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.; cell 30: TypeError: can't convert cuda:0 device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.; cell 31: NameError: name 'muA' is not defined; cell 35: TypeError: can't convert cuda:0 device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.; cell 36: NameError: name 'muA' is not defined; cell 37: TypeError: can't convert cuda:0 device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.; cell 38: NameError: name 'muA' is not defined; cell 42: TypeError: can't convert cuda:0 device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.; cell 46: TypeError: can't convert cuda:0 device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.; cell 48: TypeError: can't convert cuda:0 device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.",
+    "notebook": "merfish-visium-alignment.ipynb",
+    "packages": {
+        "jax": "0.11.0",
+        "jaxlib": "0.11.0",
+        "squidpy": "1.8.3.dev0",
+        "squidpy-ports": "0.0.1",
+        "torch": "2.13.0"
+    },
+    "python": "3.13.14",
+    "slurm_job_id": "38960595",
+    "squidpy_seconds": 6.027631774544716,
+    "status": "compared",
+    "upstream_seconds": 237.67797330766916,
+    "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
+}

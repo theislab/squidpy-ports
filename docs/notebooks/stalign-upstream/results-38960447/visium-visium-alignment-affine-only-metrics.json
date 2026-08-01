@@ -1,0 +1,22 @@
+{
+    "A relative L2": 1.0202180230467497e-6,
+    "L relative L2": 0.0,
+    "df1 relative L2": 0.0,
+    "df2 relative L2": 0.0,
+    "extentI relative L2": 0.0,
+    "extentJ relative L2": 0.0,
+    "levels relative L2": 0.0,
+    "phi relative L2": 4.683533880379237e-8,
+    "phiI relative L2": 1.708859481191756e-7,
+    "phii relative L2": 5.4795174197838545e-8,
+    "phiiJ relative L2": 1.639470218238068e-7,
+    "source_L relative L2": 0.0,
+    "tpointsI relative L2": 3.612559056859173e-8,
+    "v relative L2": 0.0,
+    "xI_L relative L2": 0.0,
+    "xI_LDDMM relative L2": 4.378560939271973e-8,
+    "xI_L_T relative L2": 0.0,
+    "yI_L relative L2": 0.0,
+    "yI_LDDMM relative L2": 1.8311021019729476e-8,
+    "yI_L_T relative L2": 0.0
+}

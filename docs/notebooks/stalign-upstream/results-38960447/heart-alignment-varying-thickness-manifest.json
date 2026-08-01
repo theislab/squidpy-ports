@@ -1,0 +1,18 @@
+{
+    "host": "supergpu17.scidom.de",
+    "note": null,
+    "notebook": "heart-alignment-varying-thickness.ipynb",
+    "packages": {
+        "jax": "0.11.0",
+        "jaxlib": "0.11.0",
+        "squidpy": "1.8.3.dev0",
+        "squidpy-ports": "0.0.1",
+        "torch": "2.13.0"
+    },
+    "python": "3.13.14",
+    "slurm_job_id": "38960448",
+    "squidpy_seconds": 3.8959556873887777,
+    "status": "compared",
+    "upstream_seconds": 58.101163905113935,
+    "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
+}
