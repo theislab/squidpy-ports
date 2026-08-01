@@ -1,6 +1,6 @@
 {
-  "failures": {},
-  "statuses": {
-    "heart-alignment.ipynb": "compared"
-  }
+    "failures": {},
+    "statuses": {
+        "heart-alignment.ipynb": "compared"
+    }
 }

@@ -1,6 +1,6 @@
 {
-  "failures": {},
-  "statuses": {
-    "merfish-merfish-alignment-simulation.ipynb": "compared"
-  }
+    "failures": {},
+    "statuses": {
+        "merfish-merfish-alignment-simulation.ipynb": "compared"
+    }
 }

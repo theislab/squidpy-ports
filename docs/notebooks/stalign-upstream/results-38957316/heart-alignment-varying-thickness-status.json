@@ -1,6 +1,6 @@
 {
-  "failures": {},
-  "statuses": {
-    "heart-alignment-varying-thickness.ipynb": "compared"
-  }
+    "failures": {},
+    "statuses": {
+        "heart-alignment-varying-thickness.ipynb": "compared"
+    }
 }

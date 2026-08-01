@@ -1,6 +1,6 @@
 {
-  "failures": {},
-  "statuses": {
-    "xenium-heimage-alignment.ipynb": "compared"
-  }
+    "failures": {},
+    "statuses": {
+        "xenium-heimage-alignment.ipynb": "compared"
+    }
 }

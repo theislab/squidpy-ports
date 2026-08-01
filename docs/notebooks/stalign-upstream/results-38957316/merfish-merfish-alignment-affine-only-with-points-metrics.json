@@ -1,7 +1,7 @@
 {
-  "affine linear relative L2": 0.0034826207297185656,
-  "affine translation relative L2": 0.0037151724250676643,
-  "aligned landmarks median |delta|": 7.097734755854643,
-  "squidpy landmark residual": 645.0019415939927,
-  "upstream landmark residual": 644.2610972745791
+    "affine linear relative L2": 0.0034826207297185656,
+    "affine translation relative L2": 0.0037151724250676643,
+    "aligned landmarks median |delta|": 7.097734755854643,
+    "squidpy landmark residual": 645.0019415939927,
+    "upstream landmark residual": 644.2610972745791
 }

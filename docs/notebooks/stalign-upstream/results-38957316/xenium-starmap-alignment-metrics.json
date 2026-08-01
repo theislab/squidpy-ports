@@ -1,8 +1,8 @@
 {
-  "aligned points median |delta|": 0.023413605465168134,
-  "aligned points p95 |delta|": 0.032010011768166334,
-  "aligned points relative L2": 3.43756197043136e-06,
-  "matching weights max |delta|": 2.936539900133539e-14,
-  "matching weights relative L2": 7.807306964478676e-16,
-  "warped density relative L2": 7.51962576394281e-05
+    "aligned points median |delta|": 0.023413605465168134,
+    "aligned points p95 |delta|": 0.032010011768166334,
+    "aligned points relative L2": 3.43756197043136e-6,
+    "matching weights max |delta|": 2.936539900133539e-14,
+    "matching weights relative L2": 7.807306964478676e-16,
+    "warped density relative L2": 7.51962576394281e-5
 }

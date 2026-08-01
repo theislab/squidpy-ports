@@ -1,6 +1,6 @@
 {
-  "failures": {},
-  "statuses": {
-    "merfish-xenium-alignment.ipynb": "compared"
-  }
+    "failures": {},
+    "statuses": {
+        "merfish-xenium-alignment.ipynb": "compared"
+    }
 }
