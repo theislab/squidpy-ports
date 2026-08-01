@@ -1,6 +1,11 @@
 {
     "$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
     "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+    // Recorded comparison results are evidence, and biome re-emits every number from its own
+    // parse: it rewrote 1.1736298494271977e-06 as ...75e-6 inside an executed notebook, a
+    // one-ULP change to a committed measurement. Excluding notebooks in .pre-commit-config.yaml
+    // was not enough because the hook walks directories itself, so it is excluded here too.
+    "files": { "includes": ["**", "!**/*.ipynb", "!**/results-*/**"] },
     "formatter": { "useEditorconfig": true },
     "overrides": [
         {

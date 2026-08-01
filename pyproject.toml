@@ -35,10 +35,10 @@ dependencies = [
   "requests",
   "scikit-image",
   "scipy",
-  "tornado",
-  "torch",
   # for debug logging (referenced from the issue template)
   "session-info2",
+  "torch",
+  "tornado",
 ]
 optional-dependencies.dev = [
   "pre-commit",
@@ -115,7 +115,11 @@ src = [ "src" ]
 extend-include = [ "*.ipynb" ]
 # Never lint or format the vendored GPL-3.0 upstream: it must stay byte-identical to
 # the pinned commit, otherwise it is no longer the reference we claim to compare against.
-extend-exclude = [ "vendor" ]
+# Executed comparison notebooks are recorded evidence. Formatters re-serialise the whole
+# notebook JSON and re-emit every number from their own parse: ruff-format rewrote
+# 1.1736298494271977e-06 as ...75e-6 inside one, a one-ULP change to a committed measurement.
+# Their code cells are three generated lines, so there is nothing here worth that risk.
+extend-exclude = [ "docs/notebooks/stalign-upstream", "vendor" ]
 
 format.docstring-code-format = true
 
