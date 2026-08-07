@@ -99,6 +99,11 @@ class ComparisonResult:
     #: written notebook read as upstream's own cells (code + output) rather than opaque
     #: ``result.figures[N]`` dumps. Empty for synthetic status panels.
     figure_sources: list[str] = field(default_factory=list)
+    #: The squidpy half of each pair, as its own PNG, parallel to ``figures``. The docs pages
+    #: show the port's plot beside upstream's *published* figure rather than beside our replay
+    #: of it, so they need the port panel alone -- cropping it back out of the composed pair
+    #: is a manual step that silently rots the moment a plot's aspect changes.
+    port_figures: list[bytes] = field(default_factory=list)
 
 
 class _FitResult(dict):
@@ -551,10 +556,11 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
     skipped_note = _require_same_cells_ran(notebook, upstream_pass, squidpy_pass)
     metrics = _namespace_metrics(upstream_pass.namespace, squidpy_pass.namespace)
     cell_source = dict(_notebook_cells(notebook))
-    figures, figure_sources = [], []
+    figures, figure_sources, port_figures = [], [], []
     for (cell_number, upstream_png), (_, squidpy_png) in zip(upstream_pass.figures, squidpy_pass.figures, strict=False):
         figures.append(_compose_pair(upstream_png, squidpy_png, f"{notebook} — cell {cell_number}"))
         figure_sources.append(cell_source.get(cell_number, ""))
+        port_figures.append(squidpy_png)
     if len(upstream_pass.figures) != len(squidpy_pass.figures):
         raise RuntimeError(
             f"{notebook}: the two passes drew {len(upstream_pass.figures)} and "
@@ -567,6 +573,7 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
         metrics=metrics,
         figures=figures,
         figure_sources=figure_sources,
+        port_figures=port_figures,
         upstream_seconds=upstream_pass.seconds,
         squidpy_seconds=squidpy_pass.seconds,
         note=" ".join(filter(None, (UPSTREAM_NOTES.get(notebook), skipped_note))) or None,
@@ -615,7 +622,15 @@ def _compare_affine(notebook: str) -> ComparisonResult:
         )
     ]
     note = " ".join(filter(None, (UPSTREAM_NOTES.get(notebook), skipped_note))) or None
-    return ComparisonResult(notebook, "compared-affine", metrics, figures, note=note, figure_sources=figure_sources)
+    return ComparisonResult(
+        notebook,
+        "compared-affine",
+        metrics,
+        figures,
+        note=note,
+        figure_sources=figure_sources,
+        port_figures=[png for _, png in squidpy_pass.figures],
+    )
 
 
 def _status_panel(notebook: str, status: str, note: str) -> ComparisonResult:
@@ -759,6 +774,10 @@ def write_result(result: ComparisonResult, output_dir: Path) -> None:
     for index, figure in enumerate(result.figures):
         suffix = "" if index == 0 else f"-{index}"
         figure.savefig(output_dir / f"{stem}-comparison{suffix}.png", dpi=ARCHIVE_DPI, bbox_inches="tight")
+    for index, png in enumerate(result.port_figures):
+        # Written verbatim: this is the exact PNG the port's own cell drew, before it was
+        # rescaled into the pair. Re-encoding it through matplotlib would only lose pixels.
+        (output_dir / f"{stem}-port{'' if index == 0 else f'-{index}'}.png").write_bytes(png)
     (output_dir / f"{stem}-metrics.json").write_text(json.dumps(result.metrics, indent=2, sort_keys=True) + "\n")
     manifest = _manifest(result.notebook, result.status, result.note, result.upstream_seconds, result.squidpy_seconds)
     (output_dir / f"{stem}-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

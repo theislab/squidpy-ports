@@ -7,6 +7,7 @@
 :maxdepth: 1
 
 stalign-comparison.md
+parity.md
 
 notebooks/stalign-xenium-comparison
 notebooks/stalign-merfish-comparison

@@ -16,6 +16,19 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 
 [scverse/squidpy#1243]: https://github.com/scverse/squidpy/issues/1243
 
+## Results & reproduction
+
+| | |
+| --- | --- |
+| **Upstream vs the port, side by side** | [Comparison page][comparison] — three real datasets: upstream's published figure beside ours, with the numerical agreement. |
+| **Parity across all 17 upstream notebooks** | [Parity page][parity]; the per-variable metrics and manifests behind it are in [`docs/parity/`][parity-data]. |
+| **Reproduce any panel on any GPU box** | [`container/README.md`][container] — one pinned container, no cluster. |
+| **How correctness is actually enforced** | The seeded reference bundle below, asserted layer by layer in squidpy's test suite. |
+
+The panels are corroboration, not the gate. The gate is the `.npz` bundle this repo emits:
+squidpy replays it at every layer — rasterisation, energy, gradients, trajectory, converged
+fit, image warp — and matches upstream to ~1e-15 on the velocity field.
+
 ## Licensing
 
 This repository is BSD-3-Clause. The vendored upstream at `vendor/STalign` is
@@ -73,6 +86,10 @@ committing a bundle built on a developer laptop.
 For questions and help requests, you can reach out in the [scverse discourse][].
 If you found a bug, please use the [issue tracker][].
 
+[comparison]: https://squidpy-ports.readthedocs.io/en/latest/stalign-comparison.html
+[parity]: https://squidpy-ports.readthedocs.io/en/latest/parity.html
+[parity-data]: https://github.com/theislab/squidpy-ports/tree/main/docs/parity
+[container]: https://github.com/theislab/squidpy-ports/blob/main/container/README.md
 [license-vendor]: https://github.com/theislab/squidpy-ports/blob/main/LICENSE.vendor
 [scverse discourse]: https://discourse.scverse.org/
 [issue tracker]: https://github.com/theislab/squidpy-ports/issues

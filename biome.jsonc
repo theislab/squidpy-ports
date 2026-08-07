@@ -5,7 +5,8 @@
     // parse: it rewrote 1.1736298494271977e-06 as ...75e-6 inside an executed notebook, a
     // one-ULP change to a committed measurement. Excluding notebooks in .pre-commit-config.yaml
     // was not enough because the hook walks directories itself, so it is excluded here too.
-    "files": { "includes": ["**", "!**/*.ipynb", "!**/results-*/**"] },
+    // docs/parity/** is the same evidence in JSON form -- metrics, manifests, statuses.
+    "files": { "includes": ["**", "!**/*.ipynb", "!docs/parity/**"] },
     "formatter": { "useEditorconfig": true },
     "overrides": [
         {

@@ -584,6 +584,22 @@ def test_written_evidence_keeps_the_notebook_lighter_than_the_archive(tmp_path):
     assert json.loads((tmp_path / "heart-alignment-metrics.json").read_text()) == result.metrics
 
 
+def test_port_figures_are_written_out_byte_for_byte(tmp_path):
+    """The docs pair the port's plot with upstream's *published* figure, not with our replay.
+
+    So the port half has to land on disk as its own PNG. Cropping it back out of the composed
+    pair is a manual step that rots the moment a plot's aspect changes.
+    """
+    from squidpy_ports.stalign.notebook_suite import ComparisonResult, write_result
+
+    port_pngs = [b"\x89PNG\r\n\x1a\n-first", b"\x89PNG\r\n\x1a\n-second"]
+    result = ComparisonResult("heart-alignment.ipynb", "compared", {}, [], port_figures=port_pngs)
+    write_result(result, tmp_path)
+
+    assert (tmp_path / "heart-alignment-port.png").read_bytes() == port_pngs[0]
+    assert (tmp_path / "heart-alignment-port-1.png").read_bytes() == port_pngs[1]
+
+
 def test_failed_comparison_writes_a_traceback_and_notebook(tmp_path):
     """A partial cluster run has to explain its failures without the suite log."""
     notebook = NOTEBOOKS[0]

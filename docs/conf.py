@@ -86,8 +86,6 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
     "**.ipynb_checkpoints",
-    # Parity run artefacts (metrics/manifests + their README). Data, not pages.
-    "notebooks/stalign-upstream/results-*",
 ]
 
 # The replayed upstream notebooks carry an `application/json` output (the metrics blob)
