@@ -10,6 +10,7 @@ From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
     pyproject.toml /opt/squidpy-ports/pyproject.toml
     uv.lock /opt/squidpy-ports/uv.lock
     README.md /opt/squidpy-ports/README.md
+    LICENSE /opt/squidpy-ports/LICENSE
     src /opt/squidpy-ports/src
     # Vendored upstream STalign (pinned submodule) carries its own notebooks AND the
     # example datasets, so the image is self-contained and needs no network at run time.
@@ -23,7 +24,9 @@ From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
     set -eu
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y --no-install-recommends git curl ca-certificates
+    # build-essential: some transitive deps (mahotas, via squidpy -> cp-measure) ship no wheel
+    # for this Python and compile from source.
+    apt-get install -y --no-install-recommends git curl ca-certificates build-essential
     rm -rf /var/lib/apt/lists/*
 
     curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
@@ -42,23 +45,26 @@ From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
     # ipykernel execute the notebooks; the resolved commit is recorded in each run's manifest.
     uv pip install --python .venv/bin/python \
         "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@6a63ff832e6e13ddf02c6add7baa28ff74c6b392" \
-        "jax[cuda12]" nbclient nbformat ipykernel
+        "jax[cuda12]" nbclient nbformat ipykernel watermark
     # Register a python3 kernel inside the env so the notebook executor finds it.
     .venv/bin/python -m ipykernel install --sys-prefix --name python3 --display-name python3
 
-    # The comparison notebooks read their inputs from docs/_build/stalign-data/<modality>_data.
-    # The vendored STalign checkout already carries those exact files, so point there: a run
-    # then finds the data present and skips the download, keeping it offline.
+    # The comparison notebooks read their inputs from docs/_build/stalign-data/<dir>. The
+    # vendored STalign checkout carries those exact files, so point there: a run finds the data
+    # present and skips the download, keeping it offline. The link name must match each
+    # notebook's expected dir -- xenium omits the `_data` suffix the others use.
     mkdir -p docs/_build/stalign-data
-    for modality in merfish visium xenium; do
-        ln -sfn "/opt/squidpy-ports/vendor/STalign/docs/${modality}_data" "docs/_build/stalign-data/${modality}_data"
-    done
+    ln -sfn /opt/squidpy-ports/vendor/STalign/docs/merfish_data docs/_build/stalign-data/merfish_data
+    ln -sfn /opt/squidpy-ports/vendor/STalign/docs/visium_data  docs/_build/stalign-data/visium_data
+    ln -sfn /opt/squidpy-ports/vendor/STalign/docs/xenium_data  docs/_build/stalign-data/xenium
 
 %environment
     export PATH=/opt/squidpy-ports/.venv/bin:$PATH
     export JAX_ENABLE_X64=1
     # The image has no .git, so upstream.load() reads the pin from here (see upstream.py).
     export SQUIDPY_PORTS_STALIGN_SHA=b2068edc98974efa54537eca194736e177bbe11d
+    # Keep matplotlib's cache on the writable overlay, not a bound $HOME on Lustre.
+    export MPLCONFIGDIR=/tmp/mpl
 
 %runscript
     cd /opt/squidpy-ports

@@ -10,6 +10,7 @@
 #SBATCH --output=stalign-compare-%j.out
 #SBATCH --error=stalign-compare-%j.err
 set -euo pipefail
+export PATH="/usr/local/bin:/usr/bin:/bin"  # submit with --export=NIL; keep the tools reachable
 
 # Thin launcher: schedule the reproduction container on the cluster, nothing more. Everything
 # about *how* a result is made -- the pinned env, the squidpy fork, the execution -- lives in

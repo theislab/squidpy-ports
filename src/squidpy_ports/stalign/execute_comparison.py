@@ -39,6 +39,17 @@ _CAPTURE_SOURCE = (
     "_plt.show = _capture_show\n"
 )
 
+# Appended before execution and kept in the saved notebook: a visible version stamp that
+# complements the machine-readable manifest. Uses the watermark API (not the magic) and is
+# tolerant, so a provenance nicety can never fail the run.
+_WATERMARK_SOURCE = (
+    "try:\n"
+    "    from watermark import watermark as _watermark\n"
+    "    print(_watermark(packages='squidpy,squidpy_ports,jax,jaxlib,torch', python=True, machine=True))\n"
+    "except Exception as _exc:\n"
+    "    print(f'watermark unavailable: {_exc}')\n"
+)
+
 
 def _package_version(name: str) -> str | None:
     try:
@@ -73,8 +84,10 @@ def execute(notebook: Path, output_dir: Path, *, timeout: int = 5400) -> Path:
     nb = nbformat.read(notebook, as_version=4)
     shim = nbformat.v4.new_code_cell(_CAPTURE_SOURCE)
     nb.cells.insert(0, shim)
+    stamp = nbformat.v4.new_code_cell(_WATERMARK_SOURCE)
+    nb.cells.append(stamp)
     NotebookClient(nb, timeout=timeout, kernel_name="python3").execute()
-    nb.cells = [cell for cell in nb.cells if cell is not shim]
+    nb.cells = [cell for cell in nb.cells if cell is not shim]  # keep the watermark stamp
 
     # Tidy execution counts back to 1..N now that the shim is gone.
     count = 0
