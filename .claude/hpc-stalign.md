@@ -50,7 +50,21 @@ Notebooks: `stalign-xenium-comparison.ipynb`, `stalign-merfish-comparison.ipynb`
 
 ## Full 17-notebook parity track (separate)
 
-`cluster/run_stalign_comparisons.sbatch` drives `squidpy_ports.stalign.notebook_suite` — it replays
+`.claude/run_stalign_comparisons.sbatch` drives `squidpy_ports.stalign.notebook_suite` — it replays
 all 17 upstream notebooks and reports per-variable relative L2 (the machine-precision internals
-check, e.g. the LDDMM velocity field to ~1e-15). It is heavier and still carries the inline
-uv-cache / node-scratch tricks; it has not been folded into the container yet.
+check, e.g. the LDDMM velocity field to ~1e-15). Heavier than the container flow and not folded into
+it yet; it still carries the inline uv-cache / node-scratch tricks.
+
+```bash
+# whole sweep: 17-task array, one notebook per task, gpu_p/gpu_normal, H100, 6c/90G, 6h/task, %6
+sbatch --export=NIL .claude/run_stalign_comparisons.sbatch \
+    /lustre/.../squidpy-ports  /lustre/.../squidpy  /lustre/.../out
+# a subset (indices into notebook_suite.NOTEBOOKS):
+sbatch --array=5,9 --export=NIL .claude/run_stalign_comparisons.sbatch ...
+```
+
+One task per notebook (the sweep is ~51k upstream iterations — serial risks one hung notebook
+spending the whole allocation). Each task stages both checkouts + the uv env to node-local scratch,
+replays its pinned notebook, logs GPU util, and rsyncs PNG/JSON/manifest back to the durable dir.
+Positional args work with `--export=NIL`; the script reconstructs only HOME/USER/PATH. The H100
+constraint keeps current CUDA wheels off incompatible older GPUs.
