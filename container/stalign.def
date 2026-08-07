@@ -1,7 +1,7 @@
 Bootstrap: docker
 From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
-# Reproduces the STalign port comparison from pinned, public sources.
+# Reproduces one STalign port-vs-upstream comparison notebook from pinned, public sources.
 # Build from the repository root:
 #     apptainer build container/stalign.sif container/stalign.def
 # See container/README.md for how to run it.
@@ -14,6 +14,10 @@ From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
     # Vendored upstream STalign (pinned submodule) carries its own notebooks AND the
     # example datasets, so the image is self-contained and needs no network at run time.
     vendor /opt/squidpy-ports/vendor
+    # The comparison notebooks the container executes (each fits upstream + the JAX port).
+    docs/notebooks/stalign-merfish-comparison.ipynb /opt/squidpy-ports/docs/notebooks/stalign-merfish-comparison.ipynb
+    docs/notebooks/stalign-visium-affine-comparison.ipynb /opt/squidpy-ports/docs/notebooks/stalign-visium-affine-comparison.ipynb
+    docs/notebooks/stalign-xenium-comparison.ipynb /opt/squidpy-ports/docs/notebooks/stalign-xenium-comparison.ipynb
 
 %post
     set -eu
@@ -34,10 +38,21 @@ From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
     # the JAX port. jax[cuda12] gives GPU JAX; the default Linux torch wheel is CUDA-enabled.
     uv sync --frozen
     # Pinned to the SHA that was the tip of feat/experimental-fit-core at authoring time.
-    # Change @<sha> to @feat/experimental-fit-core to track the branch instead.
+    # Change @<sha> to @feat/experimental-fit-core to track the branch instead. nbclient +
+    # ipykernel execute the notebooks; the resolved commit is recorded in each run's manifest.
     uv pip install --python .venv/bin/python \
         "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@6a63ff832e6e13ddf02c6add7baa28ff74c6b392" \
-        "jax[cuda12]"
+        "jax[cuda12]" nbclient nbformat ipykernel
+    # Register a python3 kernel inside the env so the notebook executor finds it.
+    .venv/bin/python -m ipykernel install --sys-prefix --name python3 --display-name python3
+
+    # The comparison notebooks read their inputs from docs/_build/stalign-data/<modality>_data.
+    # The vendored STalign checkout already carries those exact files, so point there: a run
+    # then finds the data present and skips the download, keeping it offline.
+    mkdir -p docs/_build/stalign-data
+    for modality in merfish visium xenium; do
+        ln -sfn "/opt/squidpy-ports/vendor/STalign/docs/${modality}_data" "docs/_build/stalign-data/${modality}_data"
+    done
 
 %environment
     export PATH=/opt/squidpy-ports/.venv/bin:$PATH
@@ -47,8 +62,10 @@ From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 %runscript
     cd /opt/squidpy-ports
-    # Default: the whole suite. Pass a notebook name (or --index N) to run one.
-    exec python -m squidpy_ports.stalign.notebook_suite "${@:-all}" \
+    # Execute one comparison notebook -> executed notebook + panel + manifest in /output. e.g.
+    #   apptainer run --nv --bind ./out:/output stalign.sif stalign-xenium-comparison.ipynb
+    exec python -m squidpy_ports.stalign.execute_comparison \
+        "${1:-stalign-xenium-comparison.ipynb}" \
         --output-dir "${STALIGN_OUTPUT:-/output}"
 
 %labels
