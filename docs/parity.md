@@ -52,3 +52,27 @@ by the full-suite rerun rather than edited by hand.
 - **`merfish-visium-alignment-with-curve-annotator`** — Not compared: this notebook does not run at the pinned upstream commit. Its two saved curve files hold 10 and 15 vertices, so the `L_T_from_points` call raises `Number of pointsI (10) is not equal to number of pointsJ (15)` -- and upstream's own committed output for that cell records the same exception. The replay reproduces an upstream defect; there is no fit to compare.
 - **`merfish-allen3Datlas-alignment`** — Not numerically compared: this upstream notebook calls LDDMM_3D_to_slice. Squidpy currently implements the 2D LDDMM solver only; a separate volume-to-image estimator is required for an honest comparison.
 - **`starmap-allen3Datlas-alignment`** — Not numerically compared: this upstream notebook calls LDDMM_3D_to_slice. Squidpy currently implements the 2D LDDMM solver only; a separate volume-to-image estimator is required for an honest comparison.
+
+```{toctree}
+:hidden: true
+:maxdepth: 1
+:caption: Executed replays
+
+notebooks/stalign-upstream/heart-alignment
+notebooks/stalign-upstream/heart-alignment-varying-thickness
+notebooks/stalign-upstream/merfish-merfish-alignment
+notebooks/stalign-upstream/merfish-merfish-alignment-affine-only
+notebooks/stalign-upstream/merfish-merfish-alignment-affine-only-with-points
+notebooks/stalign-upstream/merfish-merfish-alignment-simulation
+notebooks/stalign-upstream/merfish-merfish-alignment-using-L-T
+notebooks/stalign-upstream/merfish-visium-alignment
+notebooks/stalign-upstream/merfish-visium-alignment-with-curve-annotator
+notebooks/stalign-upstream/merfish-visium-alignment-with-point-annotator
+notebooks/stalign-upstream/merfish-xenium-alignment
+notebooks/stalign-upstream/visium-visium-alignment-affine-only
+notebooks/stalign-upstream/xenium-heimage-alignment
+notebooks/stalign-upstream/xenium-starmap-alignment
+notebooks/stalign-upstream/xenium-xenium-alignment
+notebooks/stalign-upstream/merfish-allen3Datlas-alignment
+notebooks/stalign-upstream/starmap-allen3Datlas-alignment
+```

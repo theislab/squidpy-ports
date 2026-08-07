@@ -140,3 +140,13 @@ apptainer run --nv --writable-tmpfs --bind ./out:/output \
 
 Each run writes the executed notebook, its panel, and a `*-manifest.json` recording package versions
 and `squidpy_commit` — so a result is never separated from the code that produced it.
+
+```{toctree}
+:hidden: true
+:maxdepth: 1
+:caption: Full runs behind this page
+
+notebooks/stalign-xenium-comparison
+notebooks/stalign-merfish-comparison
+notebooks/stalign-visium-affine-comparison
+```
