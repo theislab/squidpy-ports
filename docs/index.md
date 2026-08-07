@@ -6,6 +6,7 @@
 :hidden: true
 :maxdepth: 1
 
+stalign-comparison.md
 api.md
 changelog.md
 contributing.md
