@@ -1,0 +1,200 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /private/tmp/claude-501/-Users-selman-ozleyen-projects-squidpy-ports/b2ea7c7c-37f0-46eb-9bd2-1a52e0dfe42d/scratchpad/combined/bin/python
+rootdir: /private/tmp/claude-501/-Users-selman-ozleyen-projects-squidpy-ports/b2ea7c7c-37f0-46eb-9bd2-1a52e0dfe42d/scratchpad/squidpy-pin
+configfile: pyproject.toml
+plugins: cov-7.1.0, fast-array-utils-1.5, typeguard-4.6.0, zarr-3.3.0
+collecting ... collected 94 items
+
+tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[primitives] PASSED [  1%]
+tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[energy] PASSED [  2%]
+tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[gradients] PASSED [  3%]
+tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[trajectory_n1] PASSED [  4%]
+tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[trajectory_n5] PASSED [  5%]
+tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[trajectory_n50] PASSED [  6%]
+tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[converged_n500] PASSED [  7%]
+tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[image_trajectory] PASSED [  8%]
+tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[image_trajectory_matched] PASSED [  9%]
+tests/experimental/methods/test_stalign_reference.py::test_fixture_definitions_have_not_drifted PASSED [ 10%]
+tests/experimental/methods/test_stalign_reference.py::test_fixture_samples_are_off_grid PASSED [ 11%]
+tests/experimental/methods/test_stalign_reference.py::test_fixture_stays_inside_velocity_grid PASSED [ 12%]
+tests/experimental/methods/test_stalign_reference.py::test_interp_matches_upstream PASSED [ 13%]
+tests/experimental/methods/test_stalign_reference.py::test_regularizer_matches_upstream PASSED [ 14%]
+tests/experimental/methods/test_stalign_reference.py::test_transform_grid_backward_matches_upstream PASSED [ 15%]
+tests/experimental/methods/test_stalign_reference.py::test_warp_image_uses_the_upstream_grid PASSED [ 17%]
+tests/experimental/methods/test_stalign_reference.py::test_transform_points_forward_matches_upstream PASSED [ 18%]
+tests/experimental/methods/test_stalign_reference.py::test_to_affine_matches_upstream PASSED [ 19%]
+tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_zero-False-1] PASSED [ 20%]
+tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_zero-False-3] PASSED [ 21%]
+tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_zero-True-1] PASSED [ 22%]
+tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_zero-True-3] PASSED [ 23%]
+tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_nonzero-False-1] PASSED [ 24%]
+tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_nonzero-False-3] PASSED [ 25%]
+tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_nonzero-True-1] PASSED [ 26%]
+tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_nonzero-True-3] PASSED [ 27%]
+tests/experimental/methods/test_stalign_reference.py::test_energy_budget_is_not_vacuous PASSED [ 28%]
+tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_zero-L-grad_L] PASSED [ 29%]
+tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_zero-T-grad_T] PASSED [ 30%]
+tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_zero-v-grad_v_smoothed] PASSED [ 31%]
+tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_nonzero-L-grad_L] PASSED [ 32%]
+tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_nonzero-T-grad_T] PASSED [ 34%]
+tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_nonzero-v-grad_v_smoothed] PASSED [ 35%]
+tests/experimental/methods/test_stalign_reference.py::test_contrast_transform_freezes_the_ridge_coefficients PASSED [ 36%]
+tests/experimental/methods/test_stalign_reference.py::test_rasterize_grid_matches_upstream PASSED [ 37%]
+tests/experimental/methods/test_stalign_reference.py::test_velocity_grid_matches_upstream PASSED [ 38%]
+tests/experimental/methods/test_stalign_reference.py::test_grid_length_is_stable_against_float_rounding[30.0] PASSED [ 39%]
+tests/experimental/methods/test_stalign_reference.py::test_grid_length_is_stable_against_float_rounding[7.3] PASSED [ 40%]
+tests/experimental/methods/test_stalign_reference.py::test_grid_length_is_stable_against_float_rounding[0.017] PASSED [ 41%]
+tests/experimental/methods/test_stalign_reference.py::test_transform_points_backward_matches_upstream XFAIL [ 42%]
+tests/experimental/methods/test_stalign_reference.py::test_backward_transform_inverts_better PASSED [ 43%]
+tests/experimental/methods/test_stalign_reference.py::test_interp_outside_domain_matches_upstream XFAIL [ 44%]
+tests/experimental/methods/test_stalign_reference.py::test_interp_outside_domain_is_border_padding PASSED [ 45%]
+tests/experimental/methods/test_stalign_reference.py::test_rasterize_stays_within_budget PASSED [ 46%]
+tests/experimental/methods/test_stalign_reference.py::test_rasterize_conserves_mass PASSED [ 47%]
+tests/experimental/methods/test_stalign_reference.py::test_affine_from_points_is_equivalent_when_well_conditioned PASSED [ 48%]
+tests/experimental/methods/test_stalign_reference.py::test_affine_from_points_survives_ill_conditioning PASSED [ 50%]
+tests/experimental/methods/test_stalign_reference.py::test_trajectory_matches_upstream[1] PASSED [ 51%]
+tests/experimental/methods/test_stalign_reference.py::test_trajectory_matches_upstream[5] PASSED [ 52%]
+tests/experimental/methods/test_stalign_reference.py::test_trajectory_matches_upstream[50] PASSED [ 53%]
+tests/experimental/methods/test_stalign_reference.py::test_image_path_axes_match_the_reference PASSED [ 54%]
+tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[A] PASSED [ 55%]
+tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[v] PASSED [ 56%]
+tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[WM] PASSED [ 57%]
+tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[WA] PASSED [ 58%]
+tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[WB] PASSED [ 59%]
+tests/experimental/methods/test_stalign_reference.py::test_image_energy_trace_matches_upstream PASSED [ 60%]
+tests/experimental/methods/test_stalign_reference.py::test_image_warp_matches_upstream PASSED [ 61%]
+tests/experimental/methods/test_stalign_reference.py::test_on_grid_sampling_costs_six_orders_of_magnitude PASSED [ 62%]
+tests/experimental/methods/test_stalign_reference.py::test_velocity_grid_is_the_one_the_reference_used PASSED [ 63%]
+tests/experimental/methods/test_stalign_reference.py::test_converged_solution_matches_upstream PASSED [ 64%]
+tests/experimental/methods/test_stalign_reference.py::test_divergences_doc_covers_all_xfails PASSED [ 65%]
+tests/experimental/tl/test_align.py::test_out_none_returns_result_and_writes_nothing PASSED [ 67%]
+tests/experimental/tl/test_align.py::test_result_satisfies_align_result_protocol PASSED [ 68%]
+tests/experimental/tl/test_align.py::test_public_surface_is_align_result_only PASSED [ 69%]
+tests/experimental/tl/test_align.py::test_out_writes_in_place PASSED     [ 70%]
+tests/experimental/tl/test_align.py::test_copy_leaves_original_untouched PASSED [ 71%]
+tests/experimental/tl/test_align.py::test_out_may_overwrite_the_input_path PASSED [ 72%]
+tests/experimental/tl/test_align.py::test_sdata_pair_of_tables PASSED    [ 73%]
+tests/experimental/tl/test_align.py::test_sdata_writes_into_the_named_table_only PASSED [ 74%]
+tests/experimental/tl/test_align.py::test_sdata_copy_leaves_original_untouched PASSED [ 75%]
+tests/experimental/tl/test_align.py::test_two_sdata_objects_share_one_path PASSED [ 76%]
+tests/experimental/tl/test_align.py::test_images_fit_returns_result PASSED [ 77%]
+tests/experimental/tl/test_align.py::test_images_out_materialises_a_warped_image PASSED [ 78%]
+tests/experimental/tl/test_align.py::test_image_alignment_recovers_a_known_shift PASSED [ 79%]
+tests/experimental/tl/test_align.py::test_by_defaults_to_obs PASSED      [ 80%]
+tests/experimental/tl/test_align.py::test_by_images_needs_an_image_path PASSED [ 81%]
+tests/experimental/tl/test_align.py::test_by_obs_rejects_an_image_path PASSED [ 82%]
+tests/experimental/tl/test_align.py::test_unknown_by_lists_the_modalities PASSED [ 84%]
+tests/experimental/tl/test_align.py::test_warp_image_rejects_a_point_cloud_fit PASSED [ 85%]
+tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[nope/x-does not start with a known collection] PASSED [ 86%]
+tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[obsm-Expected `obsm/<key>`] PASSED [ 87%]
+tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[tables/t/spatial-Expected `tables/<table>/obsm/<key>`] PASSED [ 88%]
+tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[images/a/b-Expected `images/<name>`] PASSED [ 89%]
+tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[labels/x-does not read or write yet] PASSED [ 90%]
+tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[-is empty] PASSED [ 91%]
+tests/experimental/tl/test_align.py::test_missing_obsm_key_lists_what_is_available PASSED [ 92%]
+tests/experimental/tl/test_align.py::test_missing_table_lists_what_is_available PASSED [ 93%]
+tests/experimental/tl/test_align.py::test_table_path_on_anndata_is_rejected PASSED [ 94%]
+tests/experimental/tl/test_align.py::test_bare_obsm_path_on_sdata_is_ambiguous PASSED [ 95%]
+tests/experimental/tl/test_align.py::test_mixed_modalities_in_in_are_rejected PASSED [ 96%]
+tests/experimental/tl/test_align.py::test_out_modality_must_match_in PASSED [ 97%]
+tests/experimental/tl/test_align.py::test_query_required_for_anndata PASSED [ 98%]
+tests/experimental/tl/test_align.py::test_align_with_landmarks PASSED    [100%]
+
+==================================== PASSES ====================================
+- generated xml file: /Users/selman.ozleyen/projects/squidpy-ports/docs/tests/squidpy-fork-tests.xml -
+=========================== short test summary info ============================
+PASSED tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[primitives]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[energy]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[gradients]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[trajectory_n1]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[trajectory_n5]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[trajectory_n50]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[converged_n500]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[image_trajectory]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_every_fixture_carries_provenance[image_trajectory_matched]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_fixture_definitions_have_not_drifted
+PASSED tests/experimental/methods/test_stalign_reference.py::test_fixture_samples_are_off_grid
+PASSED tests/experimental/methods/test_stalign_reference.py::test_fixture_stays_inside_velocity_grid
+PASSED tests/experimental/methods/test_stalign_reference.py::test_interp_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_regularizer_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_transform_grid_backward_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_warp_image_uses_the_upstream_grid
+PASSED tests/experimental/methods/test_stalign_reference.py::test_transform_points_forward_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_to_affine_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_zero-False-1]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_zero-False-3]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_zero-True-1]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_zero-True-3]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_nonzero-False-1]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_nonzero-False-3]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_nonzero-True-1]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_energy_matches_upstream[v_nonzero-True-3]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_energy_budget_is_not_vacuous
+PASSED tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_zero-L-grad_L]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_zero-T-grad_T]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_zero-v-grad_v_smoothed]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_nonzero-L-grad_L]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_nonzero-T-grad_T]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_gradients_match_upstream[v_nonzero-v-grad_v_smoothed]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_contrast_transform_freezes_the_ridge_coefficients
+PASSED tests/experimental/methods/test_stalign_reference.py::test_rasterize_grid_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_velocity_grid_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_grid_length_is_stable_against_float_rounding[30.0]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_grid_length_is_stable_against_float_rounding[7.3]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_grid_length_is_stable_against_float_rounding[0.017]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_backward_transform_inverts_better
+PASSED tests/experimental/methods/test_stalign_reference.py::test_interp_outside_domain_is_border_padding
+PASSED tests/experimental/methods/test_stalign_reference.py::test_rasterize_stays_within_budget
+PASSED tests/experimental/methods/test_stalign_reference.py::test_rasterize_conserves_mass
+PASSED tests/experimental/methods/test_stalign_reference.py::test_affine_from_points_is_equivalent_when_well_conditioned
+PASSED tests/experimental/methods/test_stalign_reference.py::test_affine_from_points_survives_ill_conditioning
+PASSED tests/experimental/methods/test_stalign_reference.py::test_trajectory_matches_upstream[1]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_trajectory_matches_upstream[5]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_trajectory_matches_upstream[50]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_image_path_axes_match_the_reference
+PASSED tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[A]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[v]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[WM]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[WA]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_image_path_matches_upstream[WB]
+PASSED tests/experimental/methods/test_stalign_reference.py::test_image_energy_trace_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_image_warp_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_on_grid_sampling_costs_six_orders_of_magnitude
+PASSED tests/experimental/methods/test_stalign_reference.py::test_velocity_grid_is_the_one_the_reference_used
+PASSED tests/experimental/methods/test_stalign_reference.py::test_converged_solution_matches_upstream
+PASSED tests/experimental/methods/test_stalign_reference.py::test_divergences_doc_covers_all_xfails
+PASSED tests/experimental/tl/test_align.py::test_out_none_returns_result_and_writes_nothing
+PASSED tests/experimental/tl/test_align.py::test_result_satisfies_align_result_protocol
+PASSED tests/experimental/tl/test_align.py::test_public_surface_is_align_result_only
+PASSED tests/experimental/tl/test_align.py::test_out_writes_in_place
+PASSED tests/experimental/tl/test_align.py::test_copy_leaves_original_untouched
+PASSED tests/experimental/tl/test_align.py::test_out_may_overwrite_the_input_path
+PASSED tests/experimental/tl/test_align.py::test_sdata_pair_of_tables
+PASSED tests/experimental/tl/test_align.py::test_sdata_writes_into_the_named_table_only
+PASSED tests/experimental/tl/test_align.py::test_sdata_copy_leaves_original_untouched
+PASSED tests/experimental/tl/test_align.py::test_two_sdata_objects_share_one_path
+PASSED tests/experimental/tl/test_align.py::test_images_fit_returns_result
+PASSED tests/experimental/tl/test_align.py::test_images_out_materialises_a_warped_image
+PASSED tests/experimental/tl/test_align.py::test_image_alignment_recovers_a_known_shift
+PASSED tests/experimental/tl/test_align.py::test_by_defaults_to_obs
+PASSED tests/experimental/tl/test_align.py::test_by_images_needs_an_image_path
+PASSED tests/experimental/tl/test_align.py::test_by_obs_rejects_an_image_path
+PASSED tests/experimental/tl/test_align.py::test_unknown_by_lists_the_modalities
+PASSED tests/experimental/tl/test_align.py::test_warp_image_rejects_a_point_cloud_fit
+PASSED tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[nope/x-does not start with a known collection]
+PASSED tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[obsm-Expected `obsm/<key>`]
+PASSED tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[tables/t/spatial-Expected `tables/<table>/obsm/<key>`]
+PASSED tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[images/a/b-Expected `images/<name>`]
+PASSED tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[labels/x-does not read or write yet]
+PASSED tests/experimental/tl/test_align.py::test_invalid_paths_explain_the_grammar[-is empty]
+PASSED tests/experimental/tl/test_align.py::test_missing_obsm_key_lists_what_is_available
+PASSED tests/experimental/tl/test_align.py::test_missing_table_lists_what_is_available
+PASSED tests/experimental/tl/test_align.py::test_table_path_on_anndata_is_rejected
+PASSED tests/experimental/tl/test_align.py::test_bare_obsm_path_on_sdata_is_ambiguous
+PASSED tests/experimental/tl/test_align.py::test_mixed_modalities_in_in_are_rejected
+PASSED tests/experimental/tl/test_align.py::test_out_modality_must_match_in
+PASSED tests/experimental/tl/test_align.py::test_query_required_for_anndata
+PASSED tests/experimental/tl/test_align.py::test_align_with_landmarks
+XFAIL tests/experimental/methods/test_stalign_reference.py::test_transform_points_backward_matches_upstream - ledger row D6: squidpy integrates the backward flow in reversed time order, upstream does not (STalign.py:1828-1843). squidpy is correct -- see test_backward_transform_inverts_better, which is the assertion that matters. This xfail exists to pin the literal difference, and should be deleted only if squidpy ever deliberately adopts upstream's ordering.
+XFAIL tests/experimental/methods/test_stalign_reference.py::test_interp_outside_domain_matches_upstream - ledger row D5: upstream samples the velocity field with grid_sample's default padding_mode='zeros' (STalign.py:1163, :1167), squidpy uses map_coordinates(mode='nearest'). squidpy is correct -- zeros make a point that drifts off the velocity grid snap to no displacement at all.
+======================== 92 passed, 2 xfailed in 20.52s ========================

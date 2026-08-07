@@ -20,10 +20,10 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 
 | | |
 | --- | --- |
-| **Upstream vs the port, side by side** | [Comparison page][comparison] — three real datasets: upstream's published figure beside ours, with the numerical agreement. |
-| **Parity across all 17 upstream notebooks** | [Parity page][parity]; the per-variable metrics and manifests behind it are in [`docs/parity/`][parity-data]. |
+| **Visual comparison** | [Upstream's figure beside ours][comparison] — three real datasets: upstream's published figure beside ours, with the numerical agreement. |
+| **Notebook values comparison** | [Every variable in all 17 upstream notebooks][parity]; the per-variable metrics and manifests behind it are in [`docs/parity/`][parity-data]. |
 | **Reproduce any panel on any GPU box** | [`container/README.md`][container] — one pinned container, no cluster. |
-| **How correctness is actually enforced** | [The test suites][tests-section], layer by layer: [`tests/test_stalign.py`][ports-tests] here guards the generator; the fork's [`test_stalign_reference.py`][ref-tests] and [`test_align.py`][api-tests] assert the port against it. |
+| **Numerical tests** | [The test suites][tests-section], layer by layer: [`tests/test_stalign.py`][ports-tests] here guards the generator; the fork's [`test_stalign_reference.py`][ref-tests] and [`test_align.py`][api-tests] assert the port against it. |
 
 The panels are corroboration, not the gate. The gate is the `.npz` bundle this repo emits:
 squidpy replays it at every layer — rasterisation, energy, gradients, trajectory, converged
@@ -70,7 +70,55 @@ this repo's commit, a checksum of `fixtures.py`, resolved torch/numpy/platform �
 asserts on load, so the fixtures stay falsifiable rather than becoming magic numbers.
 
 Determinism has a platform caveat that matters before you commit a bundle: see
-[How correctness is enforced][tests-section].
+[Numerical tests][tests-section].
+
+## Running the tests
+
+This repo's own suite guards the generator and the replay harness. It needs nothing but a clone:
+
+```bash
+pytest
+```
+
+One test skips without squidpy and JAX installed — deliberately, since this repo does not depend on
+either. Install both and it runs.
+
+The suites that assert the *port* against upstream live in the squidpy fork, and need its reference
+bundle. No GPU: they are float64 on CPU and land identically on an H100 (50 s) and on a laptop
+(25 s).
+
+```bash
+git clone https://github.com/selmanozleyen/squidpy .squidpy-fork
+git -C .squidpy-fork checkout 6a63ff8
+uv pip install -e ".[test]" "./.squidpy-fork[jax]" pytest
+cd .squidpy-fork && JAX_ENABLE_X64=1 pytest -m "reference or not reference" \
+    tests/experimental/methods/test_stalign_reference.py \
+    tests/experimental/tl/test_align.py
+```
+
+> **`-m "reference or not reference"` is not optional.** The reference suite is marked
+> `pytest.mark.reference` and the fork's `addopts` carry `-m "not reference"`, so a plain `pytest`
+> **silently deselects all 62 of them** — the entire layer that asserts the port against upstream —
+> and still reports a green run.
+
+### How the results table is generated
+
+The table on [Numerical tests][tests-section] is not written by hand. Run the suites above with
+`--junitxml`, then:
+
+```bash
+python -m squidpy_ports.stalign.test_report \
+    --suite "this repo:tests/test_stalign.py:ports.xml" \
+    --suite "reference suite:.squidpy-fork/tests/experimental/methods/test_stalign_reference.py:fork.xml" \
+    --suite "public API:.squidpy-fork/tests/experimental/tl/test_align.py:fork.xml" \
+    --output docs/_static/tests/results.md
+```
+
+Statuses and expected-failure reasons come from the JUnit XML; each test's description is its own
+docstring, read from the source. Nothing paraphrases a test, so a wrong description is a wrong
+docstring. The raw pytest logs are committed beside the generated table in
+[`docs/_static/tests/`][test-reports]. On the Theislab cluster the container path is
+`.claude/run_tests.sbatch`.
 
 ## Contact
 
@@ -79,6 +127,7 @@ If you found a bug, please use the [issue tracker][].
 
 [comparison]: https://squidpy-ports.readthedocs.io/en/latest/stalign-comparison.html
 [tests-section]: https://squidpy-ports.readthedocs.io/en/latest/correctness.html
+[test-reports]: https://github.com/theislab/squidpy-ports/tree/main/docs/_static/tests
 [ports-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_stalign.py
 [ref-tests]: https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/methods/test_stalign_reference.py
 [api-tests]: https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/tl/test_align.py

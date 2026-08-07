@@ -1,4 +1,4 @@
-# How correctness is enforced
+# Numerical tests
 
 The [side-by-side panels](stalign-comparison.md) are real-data evidence, but they are **not** the
 gating check — a figure can look right while the algorithm underneath has drifted. The gate is a
@@ -34,6 +34,42 @@ upstream STalign itself computed.
 So "the alignment is correct" means the port is asserted against upstream at the primitive, energy,
 gradient, trajectory, converged and image levels — with the real-data panels as corroboration. Every
 file above is linked: none of it has to be taken on faith from a figure.
+
+## Results
+
+The tables below are a real run, not a claim about one, and nothing in them is written by hand.
+Statuses and expected-failure reasons come from pytest's JUnit report; each description is the
+test's **own docstring**, read from the source with `ast`. A wrong description is therefore a wrong
+docstring, and both land in the same review.
+
+```{include} _static/tests/results.md
+```
+
+Run against upstream STalign `b2068ed` and squidpy fork `6a63ff8` — the same pinned pair behind the
+figures on the [visual comparison](stalign-comparison.md) page, so the pictures and the assertions
+describe one environment. Raw pytest output is served beside this page:
+[`squidpy-ports-tests.log`](_static/tests/squidpy-ports-tests.log) and
+[`squidpy-fork-tests.log`](_static/tests/squidpy-fork-tests.log).
+[Running the tests yourself](https://github.com/theislab/squidpy-ports#running-the-tests) is four
+commands, and regenerating this table is a fifth.
+
+:::{warning}
+The fork's reference suite is marked `pytest.mark.reference`, and squidpy's `addopts` carry
+`-m "not reference"`. A plain `pytest` **silently deselects all 62 of them** and reports the
+remaining 32 as a clean run — so it must be overridden explicitly:
+
+```bash
+pytest -m "reference or not reference" \
+    tests/experimental/methods/test_stalign_reference.py tests/experimental/tl/test_align.py
+```
+:::
+
+The two expected failures are deliberate divergences where **squidpy is the more correct of the
+two**, pinned as strict `xfail` so that silently adopting upstream's behaviour breaks the build.
+Each cites a row in the fork's `STALIGN_DIVERGENCES.md`, and `test_divergences_doc_covers_all_xfails`
+asserts every xfail cites a row that exists. The one skip is environment, not a hidden failure:
+this repo deliberately does not depend on JAX or squidpy, so the test needing them runs wherever
+they are installed and says so when they are not.
 
 ## Regenerating the reference bundle
 

@@ -1,4 +1,4 @@
-# STalign parity — all 17 upstream notebooks
+# Notebook values comparison
 
 Each upstream notebook is replayed **twice**: once with upstream's PyTorch fit, once with
 Squidpy's JAX fit substituted for it. Everything after the fit is upstream's own code, so

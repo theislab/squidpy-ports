@@ -1,4 +1,4 @@
-# STalign in squidpy: upstream PyTorch vs the JAX port
+# Visual comparison: upstream PyTorch vs the JAX port
 
 squidpy's `experimental.tl.align` reimplements [STalign](https://github.com/JEFworks-Lab/STalign)'s
 affine + LDDMM alignment in JAX. This page validates that port against upstream STalign on three
@@ -104,13 +104,13 @@ The residual differences above are the deliberately documented rasterisation and
 effects at tissue edges — not disagreement in the fitted transform, whose internals agree with
 upstream to ~1e-6 and below (see below).
 
-## How the port is kept correct
+## These panels are not the gate
 
 These panels are corroboration, not the gate. The gate is a seeded reference suite that asserts the
 port against upstream at the primitive, energy, gradient, trajectory, converged and image levels —
 the velocity field matches to ~1e-15, and the ~1e-3 figures above come from rasterisation at the
-boundaries, not from the fit. Every test file is linked from
-[How correctness is enforced](correctness.md).
+boundaries, not from the fit. Every test, what it asserts, and whether it passes is on
+[Numerical tests](correctness.md).
 
 ## Reproducing every panel
 

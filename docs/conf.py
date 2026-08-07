@@ -86,6 +86,10 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
     "**.ipynb_checkpoints",
+    # A fragment `{include}`d into correctness.md, not a page. It lives under _static so the raw
+    # pytest logs beside it are served with it. Left in, sphinx would also build it standalone and
+    # warn that its headings start at H3 -- and `-W` turns that into a failure.
+    "_static/tests/results.md",
 ]
 
 # The replayed upstream notebooks carry an `application/json` output (the metrics blob)
