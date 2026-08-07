@@ -20,3 +20,6 @@ __pycache__/
 /docs/generated/
 /docs/_build/
 /cluster-results/
+
+# built container images
+*.sif

@@ -1,0 +1,56 @@
+Bootstrap: docker
+From: nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+# Reproduces the STalign port comparison from pinned, public sources.
+# Build from the repository root:
+#     apptainer build container/stalign.sif container/stalign.def
+# See container/README.md for how to run it.
+
+%files
+    pyproject.toml /opt/squidpy-ports/pyproject.toml
+    uv.lock /opt/squidpy-ports/uv.lock
+    README.md /opt/squidpy-ports/README.md
+    src /opt/squidpy-ports/src
+    # Vendored upstream STalign (pinned submodule) carries its own notebooks AND the
+    # example datasets, so the image is self-contained and needs no network at run time.
+    vendor /opt/squidpy-ports/vendor
+
+%post
+    set -eu
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends git curl ca-certificates
+    rm -rf /var/lib/apt/lists/*
+
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+
+    cd /opt/squidpy-ports
+    # No .git in the image, so hand the version generators the same values the cluster job
+    # used instead of deriving them from tags.
+    export SETUPTOOLS_SCM_PRETEND_VERSION=1.8.3.dev0
+    export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SQUIDPY=1.8.3.dev0
+
+    # squidpy-ports (this repo) supplies upstream PyTorch; the pinned squidpy fork supplies
+    # the JAX port. jax[cuda12] gives GPU JAX; the default Linux torch wheel is CUDA-enabled.
+    uv sync --frozen
+    # Pinned to the SHA that was the tip of feat/experimental-fit-core at authoring time.
+    # Change @<sha> to @feat/experimental-fit-core to track the branch instead.
+    uv pip install --python .venv/bin/python \
+        "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@6a63ff832e6e13ddf02c6add7baa28ff74c6b392" \
+        "jax[cuda12]"
+
+%environment
+    export PATH=/opt/squidpy-ports/.venv/bin:$PATH
+    export JAX_ENABLE_X64=1
+    # The image has no .git, so upstream.load() reads the pin from here (see upstream.py).
+    export SQUIDPY_PORTS_STALIGN_SHA=b2068edc98974efa54537eca194736e177bbe11d
+
+%runscript
+    cd /opt/squidpy-ports
+    # Default: the whole suite. Pass a notebook name (or --index N) to run one.
+    exec python -m squidpy_ports.stalign.notebook_suite "${@:-all}" \
+        --output-dir "${STALIGN_OUTPUT:-/output}"
+
+%labels
+    upstream.stalign b2068edc98974efa54537eca194736e177bbe11d
+    squidpy.fork selmanozleyen/squidpy@6a63ff832e6e13ddf02c6add7baa28ff74c6b392
