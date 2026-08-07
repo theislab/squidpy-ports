@@ -46,7 +46,7 @@ _WATERMARK_SOURCE = (
     "try:\n"
     "    from watermark import watermark as _watermark\n"
     "    print(_watermark(packages='squidpy,squidpy_ports,jax,jaxlib,torch', python=True, machine=True))\n"
-    "except Exception as _exc:\n"
+    "except Exception as _exc:  # noqa: BLE001 - a version stamp must never fail the run\n"
     "    print(f'watermark unavailable: {_exc}')\n"
 )
 

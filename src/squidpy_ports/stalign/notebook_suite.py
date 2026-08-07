@@ -15,7 +15,7 @@ import time
 import traceback
 from collections.abc import Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
@@ -95,6 +95,10 @@ class ComparisonResult:
     upstream_seconds: float = 0.0
     squidpy_seconds: float = 0.0
     note: str | None = None
+    #: Upstream cell source that produced each figure, parallel to ``figures`` -- lets the
+    #: written notebook read as upstream's own cells (code + output) rather than opaque
+    #: ``result.figures[N]`` dumps. Empty for synthetic status panels.
+    figure_sources: list[str] = field(default_factory=list)
 
 
 class _FitResult(dict):
@@ -546,9 +550,11 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
 
     skipped_note = _require_same_cells_ran(notebook, upstream_pass, squidpy_pass)
     metrics = _namespace_metrics(upstream_pass.namespace, squidpy_pass.namespace)
-    figures = []
+    cell_source = dict(_notebook_cells(notebook))
+    figures, figure_sources = [], []
     for (cell_number, upstream_png), (_, squidpy_png) in zip(upstream_pass.figures, squidpy_pass.figures, strict=False):
         figures.append(_compose_pair(upstream_png, squidpy_png, f"{notebook} — cell {cell_number}"))
+        figure_sources.append(cell_source.get(cell_number, ""))
     if len(upstream_pass.figures) != len(squidpy_pass.figures):
         raise RuntimeError(
             f"{notebook}: the two passes drew {len(upstream_pass.figures)} and "
@@ -560,6 +566,7 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
         status="compared",
         metrics=metrics,
         figures=figures,
+        figure_sources=figure_sources,
         upstream_seconds=upstream_pass.seconds,
         squidpy_seconds=squidpy_pass.seconds,
         note=" ".join(filter(None, (UPSTREAM_NOTES.get(notebook), skipped_note))) or None,
@@ -599,6 +606,8 @@ def _compare_affine(notebook: str) -> ComparisonResult:
 
     skipped_note = _require_same_cells_ran(notebook, upstream_pass, squidpy_pass)
     metrics = {**_namespace_metrics(upstream_pass.namespace, squidpy_pass.namespace), **residuals}
+    cell_source = dict(_notebook_cells(notebook))
+    figure_sources = [cell_source.get(cell_number, "") for cell_number, _ in upstream_pass.figures]
     figures = [
         _compose_pair(upstream_png, squidpy_png, f"{notebook} — cell {cell_number}")
         for (cell_number, upstream_png), (_, squidpy_png) in zip(
@@ -606,7 +615,7 @@ def _compare_affine(notebook: str) -> ComparisonResult:
         )
     ]
     note = " ".join(filter(None, (UPSTREAM_NOTES.get(notebook), skipped_note))) or None
-    return ComparisonResult(notebook, "compared-affine", metrics, figures, note=note)
+    return ComparisonResult(notebook, "compared-affine", metrics, figures, note=note, figure_sources=figure_sources)
 
 
 def _status_panel(notebook: str, status: str, note: str) -> ComparisonResult:
@@ -772,10 +781,12 @@ def write_result(result: ComparisonResult, output_dir: Path) -> None:
                     "output_type": "execute_result",
                 }
             ],
-            "source": _compare_source(result.notebook, "result.metrics\n"),
+            "source": ["# per-variable relative L2: upstream STalign vs the squidpy JAX port\n"],
         },
     ]
     for index, figure in enumerate(result.figures):
+        raw = result.figure_sources[index] if index < len(result.figure_sources) else ""
+        source = raw.splitlines(keepends=True) if raw.strip() else [f"# upstream vs squidpy — figure {index + 1}\n"]
         cells.append(
             {
                 "cell_type": "code",
@@ -786,13 +797,13 @@ def write_result(result: ComparisonResult, output_dir: Path) -> None:
                     {
                         "data": {
                             "image/png": _embedded_panel(figure),
-                            "text/plain": [f"<upstream vs Squidpy, figure {index + 1}>"],
+                            "text/plain": [f"<upstream (left) vs squidpy (right), figure {index + 1}>"],
                         },
                         "metadata": {},
                         "output_type": "display_data",
                     }
                 ],
-                "source": [f"result.figures[{index}]\n"],
+                "source": source,
             }
         )
     _write_notebook({"cells": cells}, manifest, output_dir)

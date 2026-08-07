@@ -1,0 +1,11 @@
+{
+    "notebook": "stalign-visium-affine-comparison.ipynb",
+    "packages": {
+        "squidpy": "1.8.3.dev0",
+        "squidpy-ports": "0.0.1",
+        "jax": "0.11.0",
+        "jaxlib": "0.11.0",
+        "torch": "2.13.0"
+    },
+    "squidpy_commit": "6a63ff832e6e13ddf02c6add7baa28ff74c6b392"
+}

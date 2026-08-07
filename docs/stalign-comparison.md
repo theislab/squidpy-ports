@@ -31,15 +31,22 @@ aligned = result.aligned_points          # moving points mapped onto the referen
 warped  = result.warp_image(density)     # push a density/image through the same transform
 ```
 
-## One-to-one results
+## Upstream result vs the port, side by side
 
-Each panel replays an upstream STalign example and runs the JAX port beside it on the **same**
-inputs. Top row: upstream warped density · port warped density · their difference. Bottom row:
-upstream aligned points · port aligned points · pointwise `|upstream − port|`.
+Each pair is **two separate figures**. On the **left** is upstream STalign's own published figure,
+**downloaded** from the pinned upstream repo (`_static/reference/`, extracted verbatim from the
+vendored notebooks). On the **right** is **our** figure — the *same* plot, produced by the squidpy
+JAX port in our run (the port half of the parity replay). The table is the numerical agreement.
 
 ### Xenium ↔ Xenium (LDDMM, landmark-guided)
 
-![Xenium upstream-vs-port comparison](_static/comparisons/xenium-xenium.png)
+<table width="100%">
+<thead><tr><th width="50%">Upstream STalign — downloaded (published)</th><th width="50%">squidpy JAX port — our run</th></tr></thead>
+<tbody><tr>
+<td><img src="_static/reference/upstream-xenium-xenium.png" width="100%" alt="upstream xenium published result, downloaded"></td>
+<td><img src="_static/comparisons/port-xen-overlay.png" width="100%" alt="squidpy port xenium result, our run"></td>
+</tr></tbody>
+</table>
 
 | metric | value |
 |---|---|
@@ -48,14 +55,17 @@ upstream aligned points · port aligned points · pointwise `|upstream − port|
 | landmark TRE, upstream / port | 28.6 µm / **27.6 µm** |
 | warped density, relative L2 | 4.3 × 10⁻² |
 
-Full run: [`stalign-xenium-comparison`](notebooks/stalign-xenium-comparison). Native upstream
-reference: [`upstream-xenium-xenium.png`](_static/reference/upstream-xenium-xenium.png)
-(and its [deformation grid](_static/reference/upstream-xenium-xenium-grid.png) /
-[convergence](_static/reference/upstream-xenium-xenium-convergence.png)).
+Full comparison (densities, pointwise Δ): [`stalign-xenium-comparison`](notebooks/stalign-xenium-comparison).
 
 ### MERFISH ↔ MERFISH (LDDMM)
 
-![MERFISH upstream-vs-port comparison](_static/comparisons/merfish-merfish.png)
+<table width="100%">
+<thead><tr><th width="50%">Upstream STalign — downloaded (published)</th><th width="50%">squidpy JAX port — our run</th></tr></thead>
+<tbody><tr>
+<td><img src="_static/reference/upstream-merfish-merfish.png" width="100%" alt="upstream merfish published result, downloaded"></td>
+<td><img src="_static/comparisons/port-mer-overlay.png" width="100%" alt="squidpy port merfish result, our run"></td>
+</tr></tbody>
+</table>
 
 | metric | value |
 |---|---|
@@ -64,14 +74,13 @@ reference: [`upstream-xenium-xenium.png`](_static/reference/upstream-xenium-xeni
 | fixed-NN median, upstream / port | 10.92 / 10.92 |
 | warped density, relative L2 | 3.5 × 10⁻² |
 
-Full run: [`stalign-merfish-comparison`](notebooks/stalign-merfish-comparison). Native upstream
-reference: [`upstream-merfish-merfish.png`](_static/reference/upstream-merfish-merfish.png)
-(and its [deformation grid](_static/reference/upstream-merfish-merfish-grid.png) /
-[convergence](_static/reference/upstream-merfish-merfish-convergence.png)).
+Full comparison (densities, pointwise Δ): [`stalign-merfish-comparison`](notebooks/stalign-merfish-comparison).
 
 ### Visium ↔ Visium (affine-only)
 
-![Visium upstream-vs-port comparison](_static/comparisons/visium-visium-affine.png)
+Upstream STalign — downloaded (published):
+
+<img src="_static/reference/upstream-visium-visium-affine.png" width="60%" alt="upstream visium published result, downloaded">
 
 | metric | value |
 |---|---|
@@ -80,12 +89,14 @@ reference: [`upstream-merfish-merfish.png`](_static/reference/upstream-merfish-m
 | fixed-NN median, upstream / port | 0.483 / 0.468 |
 | warped density, relative L2 | 1.6 × 10⁻² |
 
-Full run: [`stalign-visium-affine-comparison`](notebooks/stalign-visium-affine-comparison). Native
-upstream reference: [`upstream-visium-visium-affine.png`](_static/reference/upstream-visium-visium-affine.png).
+No paired port figure here: upstream's Visium overlay cell errors under the GPU build (a documented
+upstream/env quirk), so the parity replay skips it. The affine transform still matches upstream to
+~1e-6, and the port's own densities + aligned points are in the full run:
+[`stalign-visium-affine-comparison`](notebooks/stalign-visium-affine-comparison).
 
-The differences that remain are the deliberately documented rasterisation and boundary-condition
-effects, concentrated at tissue edges — not disagreement in the fitted transform, which matches
-upstream far more tightly (see below).
+The residual differences above are the deliberately documented rasterisation and boundary-condition
+effects at tissue edges — not disagreement in the fitted transform, whose internals agree with
+upstream to ~1e-6 and below (see below).
 
 ## How the port is kept correct
 
@@ -114,13 +125,6 @@ values that upstream STalign itself computed:
 
 So "alignment is ensured" by asserting the port against upstream at the primitive, energy, gradient,
 trajectory, converged, and image levels — with the real-data panels here as corroboration.
-
-## Coverage
-
-Both repos ship a Codecov config, but the gate is currently a no-op (`target: 1%` in
-`.codecov.yaml`) — CI reports coverage without ever failing on it. The reference tests already assert
-**numeric** correctness (not just array shapes), so raising the target to a real value (e.g. 80%)
-would turn a regression into a red build. That is a recommended follow-up, not done here.
 
 ## Reproducing every panel
 
