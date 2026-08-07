@@ -7,13 +7,7 @@
 :maxdepth: 1
 
 stalign-comparison.md
-api.md
-changelog.md
-contributing.md
-references.md
-stalign-upstream-comparison-todos.md
 
-notebooks/example
 notebooks/stalign-xenium-comparison
 notebooks/stalign-merfish-comparison
 notebooks/stalign-visium-affine-comparison

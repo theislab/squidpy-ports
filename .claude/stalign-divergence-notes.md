@@ -7,9 +7,10 @@ JAX implementation on H100 GPUs -- one Slurm array task per notebook.
 
 ## Complete suite, job array 38957316
 
-Every notebook has executed evidence: the notebooks in this directory *are* the executed
-comparisons, and [`results-38957316/`](notebooks/stalign-upstream/results-38957316) holds
-their metrics, manifests, per-notebook status, and package versions. Full-resolution PNG
+Working notes, kept out of the published docs. The numbers below are from job array
+38957316, whose result directory has since been superseded by
+`docs/notebooks/stalign-upstream/results-38960447/` (same notebooks, later fork) — see
+`HANDOFF.md` §2 for the current table. Full-resolution PNG
 panels and GPU monitoring stay on cluster storage under
 `stalign-full-suite/source-20260731-019fb8c6/squidpy-ports/cluster-results/38957316`; the
 notebooks embed a web-resolution copy of the same panel.

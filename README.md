@@ -19,7 +19,7 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 ## Licensing
 
 This repository is BSD-3-Clause. The vendored upstream at `vendor/STalign` is
-**GPL-3.0** ([`LICENSE.vendor`](LICENSE.vendor)) and is included as a git submodule, not
+**GPL-3.0** ([`LICENSE.vendor`][license-vendor]) and is included as a git submodule, not
 redistributed as part of any built artifact. Nothing is published to PyPI.
 
 The generated `.npz` bundle holds numerical outputs computed from synthetic, seeded
@@ -73,6 +73,7 @@ committing a bundle built on a developer laptop.
 For questions and help requests, you can reach out in the [scverse discourse][].
 If you found a bug, please use the [issue tracker][].
 
+[license-vendor]: https://github.com/theislab/squidpy-ports/blob/main/LICENSE.vendor
 [scverse discourse]: https://discourse.scverse.org/
 [issue tracker]: https://github.com/theislab/squidpy-ports/issues
 [tests]: https://github.com/theislab/squidpy-ports/actions/workflows/test.yaml

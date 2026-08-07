@@ -50,14 +50,10 @@ optional-dependencies.doc = [
   "ipython",
   "myst-nb>=1.1",
   "pandas",
-  # Until pybtex >0.24.0 releases: https://bitbucket.org/pybtex-devs/pybtex/issues/169/
-  "setuptools",
   "sphinx>=8.1",
-  "sphinx-autodoc-typehints",
   "sphinx-book-theme>=1",
   "sphinx-copybutton",
   "sphinx-tabs",
-  "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
 ]
 optional-dependencies.test = [
@@ -176,9 +172,5 @@ skip = [
   "vendor",
   "src/**/__init__.py",
   "src/**/basic.py",
-  "docs/api.md",
-  "docs/changelog.md",
-  "docs/references.bib",
-  "docs/references.md",
   "docs/notebooks/example.ipynb",
 ]
