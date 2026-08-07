@@ -1,10 +1,7 @@
 # Visual comparison: upstream PyTorch vs the JAX port
 
-squidpy's `experimental.tl.align` reimplements [STalign](https://github.com/JEFworks-Lab/STalign)'s
-affine + LDDMM alignment in JAX. This page validates that port against upstream STalign on three
-real datasets — it shows what upstream produces natively, the one-to-one comparison against the
-port on identical inputs, the numerical agreement, how correctness is enforced by tests, and how to
-reproduce every panel from a single container.
+Three real datasets, each showing what upstream STalign produces natively beside what the JAX port
+produces on identical inputs, with the numerical agreement between them.
 
 All squidpy results here come from the pinned fork
 [`selmanozleyen/squidpy@6a63ff8`](https://github.com/selmanozleyen/squidpy/tree/feat/experimental-fit-core);
@@ -114,7 +111,7 @@ boundaries, not from the fit. Every test, what it asserts, and whether it passes
 
 ## Reproducing every panel
 
-Everything on this page is reproducible from one container — no cluster, no environment tricks. It
+Everything on this page is reproducible from one container — no environment tricks. It
 pins the fork, upstream STalign, and the datasets, and stamps the exact fork commit into each run's
 manifest. See [`container/README.md`](https://github.com/theislab/squidpy-ports/blob/main/container/README.md):
 

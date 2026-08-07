@@ -3,39 +3,38 @@ platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /private/tmp/cl
 rootdir: /Users/selman.ozleyen/projects/squidpy-ports
 configfile: pyproject.toml
 plugins: cov-7.1.0, fast-array-utils-1.5, typeguard-4.6.0, zarr-3.3.0
-collecting ... collected 36 items
+collecting ... collected 35 items
 
 tests/test_stalign.py::test_vendored_upstream_is_pinned PASSED           [  2%]
 tests/test_stalign.py::test_staged_checkout_uses_preverified_sha PASSED  [  5%]
 tests/test_stalign.py::test_notebook_suite_maps_every_upstream_notebook PASSED [  8%]
 tests/test_stalign.py::test_notebook_wrappers_are_one_to_one PASSED      [ 11%]
-tests/test_stalign.py::test_clouds_are_deterministic PASSED              [ 13%]
-tests/test_stalign.py::test_query_is_a_thinned_transform_of_ref PASSED   [ 16%]
-tests/test_stalign.py::test_energy_and_gradient_spies_agree_with_the_loop PASSED [ 19%]
+tests/test_stalign.py::test_clouds_are_deterministic PASSED              [ 14%]
+tests/test_stalign.py::test_query_is_a_thinned_transform_of_ref PASSED   [ 17%]
+tests/test_stalign.py::test_energy_and_gradient_spies_agree_with_the_loop PASSED [ 20%]
 tests/test_stalign.py::test_returned_affine_lags_one_step PASSED         [ 22%]
 tests/test_stalign.py::test_port_signature_matches_the_mirror PASSED     [ 25%]
-tests/test_stalign.py::test_captured_scalars_stay_hashable_python_scalars[python] PASSED [ 27%]
-tests/test_stalign.py::test_captured_scalars_stay_hashable_python_scalars[numpy] PASSED [ 30%]
-tests/test_stalign.py::test_captured_scalars_stay_hashable_python_scalars[torch] PASSED [ 33%]
-tests/test_stalign.py::test_captured_arrays_stay_arrays PASSED           [ 36%]
-tests/test_stalign.py::test_mixture_means_left_to_be_estimated_are_dropped PASSED [ 38%]
-tests/test_stalign.py::test_captured_affine_is_split_into_linear_and_translation PASSED [ 41%]
-tests/test_stalign.py::test_captured_linear_and_translation_pass_through PASSED [ 44%]
-tests/test_stalign.py::test_identity_is_used_when_no_affine_was_captured PASSED [ 47%]
-tests/test_stalign.py::test_captured_warm_start_velocity_is_renamed_with_its_grid PASSED [ 50%]
-tests/test_stalign.py::test_upstream_only_keywords_are_dropped PASSED    [ 52%]
-tests/test_stalign.py::test_an_array_for_a_scalar_argument_is_refused PASSED [ 55%]
-tests/test_stalign.py::test_the_unreplayable_notebook_is_still_unreplayable_upstream PASSED [ 58%]
-tests/test_stalign.py::test_replay_keeps_a_cells_own_imports PASSED      [ 61%]
-tests/test_stalign.py::test_replay_directory_resolves_both_upstream_path_depths PASSED [ 63%]
-tests/test_stalign.py::test_fit_result_supports_every_api_the_notebooks_use PASSED [ 66%]
-tests/test_stalign.py::test_renamed_helpers_resolve_and_are_still_renames PASSED [ 69%]
-tests/test_stalign.py::test_replay_uses_the_notebooks_own_variables_for_metrics PASSED [ 72%]
-tests/test_stalign.py::test_index_maps_array_task_ids_onto_notebooks PASSED [ 75%]
-tests/test_stalign.py::test_cli_index_runs_one_notebook_and_writes_its_status PASSED [ 77%]
-tests/test_stalign.py::test_cli_rejects_selecting_nothing PASSED         [ 80%]
-tests/test_stalign.py::test_committed_notebooks_report_their_recorded_metrics SKIPPED [ 83%]
-tests/test_stalign.py::test_written_evidence_keeps_the_notebook_lighter_than_the_archive PASSED [ 86%]
+tests/test_stalign.py::test_captured_scalars_stay_hashable_python_scalars[python] PASSED [ 28%]
+tests/test_stalign.py::test_captured_scalars_stay_hashable_python_scalars[numpy] PASSED [ 31%]
+tests/test_stalign.py::test_captured_scalars_stay_hashable_python_scalars[torch] PASSED [ 34%]
+tests/test_stalign.py::test_captured_arrays_stay_arrays PASSED           [ 37%]
+tests/test_stalign.py::test_mixture_means_left_to_be_estimated_are_dropped PASSED [ 40%]
+tests/test_stalign.py::test_captured_affine_is_split_into_linear_and_translation PASSED [ 42%]
+tests/test_stalign.py::test_captured_linear_and_translation_pass_through PASSED [ 45%]
+tests/test_stalign.py::test_identity_is_used_when_no_affine_was_captured PASSED [ 48%]
+tests/test_stalign.py::test_captured_warm_start_velocity_is_renamed_with_its_grid PASSED [ 51%]
+tests/test_stalign.py::test_upstream_only_keywords_are_dropped PASSED    [ 54%]
+tests/test_stalign.py::test_an_array_for_a_scalar_argument_is_refused PASSED [ 57%]
+tests/test_stalign.py::test_the_unreplayable_notebook_is_still_unreplayable_upstream PASSED [ 60%]
+tests/test_stalign.py::test_replay_keeps_a_cells_own_imports PASSED      [ 62%]
+tests/test_stalign.py::test_replay_directory_resolves_both_upstream_path_depths PASSED [ 65%]
+tests/test_stalign.py::test_fit_result_supports_every_api_the_notebooks_use PASSED [ 68%]
+tests/test_stalign.py::test_renamed_helpers_resolve_and_are_still_renames PASSED [ 71%]
+tests/test_stalign.py::test_replay_uses_the_notebooks_own_variables_for_metrics PASSED [ 74%]
+tests/test_stalign.py::test_index_maps_array_task_ids_onto_notebooks PASSED [ 77%]
+tests/test_stalign.py::test_cli_index_runs_one_notebook_and_writes_its_status PASSED [ 80%]
+tests/test_stalign.py::test_cli_rejects_selecting_nothing PASSED         [ 82%]
+tests/test_stalign.py::test_written_evidence_keeps_the_notebook_lighter_than_the_archive PASSED [ 85%]
 tests/test_stalign.py::test_port_figures_are_written_out_byte_for_byte PASSED [ 88%]
 tests/test_stalign.py::test_failed_comparison_writes_a_traceback_and_notebook PASSED [ 91%]
 tests/test_stalign.py::test_fixture_transform_is_not_round[THETA] PASSED [ 94%]
@@ -54,7 +53,7 @@ tests/test_stalign.py::test_returned_affine_lags_one_step
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ==================================== PASSES ====================================
-- generated xml file: /Users/selman.ozleyen/projects/squidpy-ports/docs/tests/squidpy-ports-tests.xml -
+- generated xml file: /private/tmp/claude-501/-Users-selman-ozleyen-projects-squidpy-ports/b2ea7c7c-37f0-46eb-9bd2-1a52e0dfe42d/scratchpad/ports-final.xml -
 =========================== short test summary info ============================
 PASSED tests/test_stalign.py::test_vendored_upstream_is_pinned
 PASSED tests/test_stalign.py::test_staged_checkout_uses_preverified_sha
@@ -91,5 +90,4 @@ PASSED tests/test_stalign.py::test_failed_comparison_writes_a_traceback_and_note
 PASSED tests/test_stalign.py::test_fixture_transform_is_not_round[THETA]
 PASSED tests/test_stalign.py::test_fixture_transform_is_not_round[SHIFT]
 PASSED tests/test_stalign.py::test_report_folds_parametrised_cases_and_separates_xfail_from_skip
-SKIPPED [1] tests/test_stalign.py:529: no committed comparison results
-================== 35 passed, 1 skipped, 26 warnings in 8.96s ==================
+======================= 35 passed, 26 warnings in 32.44s =======================

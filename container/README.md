@@ -1,10 +1,10 @@
 # Reproducing a STalign comparison
 
 The comparison panels are produced by **one container**, from **pinned, public sources** —
-no cluster, no sibling checkout, no environment tricks. It bundles this repository, the
+no sibling checkout, no environment tricks. It bundles this repository, the
 pinned squidpy JAX port (`selmanozleyen/squidpy@6a63ff8`), the pinned upstream STalign
 submodule (`b2068ed`) with its datasets, and the comparison notebooks. Anyone with a GPU box
-and Apptainer can rebuild any result; the cluster is just one place to schedule it.
+and Apptainer can rebuild any result.
 
 ## Build
 
@@ -51,15 +51,6 @@ this made".
 | Upstream STalign | `b2068edc98974efa54537eca194736e177bbe11d` | submodule, baked in |
 | squidpy JAX port | `selmanozleyen/squidpy@6a63ff8` (`feat/experimental-fit-core`) | installed from git at build |
 | squidpy-ports | this checkout | `%files` at build |
-
-## On the Theislab cluster
-
-`cluster/run_container.sbatch` is a thin launcher — it only schedules `apptainer run` on a
-GPU node. All the reproduction logic is in the container above, not in the batch script:
-
-```bash
-sbatch cluster/run_container.sbatch /path/to/stalign.sif stalign-xenium-comparison.ipynb ./out
-```
 
 ## CPU-only
 

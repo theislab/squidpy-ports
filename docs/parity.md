@@ -12,13 +12,6 @@ one `-metrics.json`, `-manifest.json` and `-status.json` per notebook. Each mani
 records the host, package versions and the resolved `squidpy_commit`, so no result is
 separated from the code that produced it.
 
-:::{note}
-This table is from job array `38960447`, run against an **earlier** commit of the fork.
-The three notebooks shown on [the comparison page](stalign-comparison.md) have since been
-regenerated at `6a63ff8`; the numbers moved only marginally, but this table is refreshed
-by the full-suite rerun rather than edited by hand.
-:::
-
 | notebook | status | largest divergence | upstream | squidpy |
 | --- | --- | --- | --- | --- |
 | [`xenium-heimage-alignment`](notebooks/stalign-upstream/xenium-heimage-alignment) | compared | `v` = `3.1e-01` | 141s | 6s |

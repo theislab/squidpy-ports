@@ -2,17 +2,16 @@
 
 | Suite | Test functions | Cases | Result |
 | --- | --- | --- | --- |
-| `test_stalign.py` | this repo — generator and replay harness | 33 | 36 cases: 35 passed, 1 skipped |
+| `test_stalign.py` | this repo — generator and replay harness | 32 | 35 cases: 35 passed |
 | `test_stalign_reference.py` | squidpy fork — reference suite | 34 | 62 cases: 60 passed, 2 xfailed |
 | `test_align.py` | squidpy fork — public API | 27 | 32 cases: 32 passed |
 
-**No failures.** 127 passing cases, 2 expected failures, 1 skipped, across 94 test functions.
+**No failures.** 127 passing cases, 2 expected failures, 0 skipped, across 93 test functions.
 
 ### Everything that did not simply pass
 
 | Test | Outcome | Reason pytest recorded |
 | --- | --- | --- |
-| `test_committed_notebooks_report_their_recorded_metrics` <br><sub>this repo — generator and replay harness</sub> | skipped | no committed comparison results |
 | `test_transform_points_backward_matches_upstream` <br><sub>squidpy fork — reference suite</sub> | expected failure | ledger row D6: squidpy integrates the backward flow in reversed time order, upstream does not (STalign.py:1828-1843). squidpy is correct -- see test_backward_transform_inverts_better, which is the assertion that matters. This xfail exists to pin the literal difference, and should be deleted only if squidpy ever deliberately adopts upstream's ordering. |
 | `test_interp_outside_domain_matches_upstream` <br><sub>squidpy fork — reference suite</sub> | expected failure | ledger row D5: upstream samples the velocity field with grid_sample's default padding_mode='zeros' (STalign.py:1163, :1167), squidpy uses map_coordinates(mode='nearest'). squidpy is correct -- zeros make a point that drifts off the velocity grid snap to no displacement at all. |
 
@@ -47,7 +46,6 @@
 | `test_index_maps_array_task_ids_onto_notebooks` | A Slurm array task knows only its id, so this mapping is what selects the work. | 1 | pass |
 | `test_cli_index_runs_one_notebook_and_writes_its_status` | The array's entry point, end to end. | 1 | pass |
 | `test_cli_rejects_selecting_nothing` | — | 1 | pass |
-| `test_committed_notebooks_report_their_recorded_metrics` | Every committed comparison notebook must still carry the numbers its run produced. | 1 | skipped |
 | `test_written_evidence_keeps_the_notebook_lighter_than_the_archive` | The committed notebook carries a web-resolution panel; the PNG beside it stays archival. | 1 | pass |
 | `test_port_figures_are_written_out_byte_for_byte` | The docs pair the port's plot with upstream's *published* figure, not with our replay. | 1 | pass |
 | `test_failed_comparison_writes_a_traceback_and_notebook` | A partial cluster run has to explain its failures without the suite log. | 1 | pass |

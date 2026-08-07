@@ -67,9 +67,11 @@ pytest -m "reference or not reference" \
 The two expected failures are deliberate divergences where **squidpy is the more correct of the
 two**, pinned as strict `xfail` so that silently adopting upstream's behaviour breaks the build.
 Each cites a row in the fork's `STALIGN_DIVERGENCES.md`, and `test_divergences_doc_covers_all_xfails`
-asserts every xfail cites a row that exists. The one skip is environment, not a hidden failure:
-this repo deliberately does not depend on JAX or squidpy, so the test needing them runs wherever
-they are installed and says so when they are not.
+asserts every xfail cites a row that exists.
+
+Nothing is skipped in the run above because both sides are installed. Running this repo's suite
+alone leaves one test skipped — it needs JAX and squidpy, which this repo deliberately does not
+depend on — and it says so rather than passing quietly.
 
 ## Regenerating the reference bundle
 

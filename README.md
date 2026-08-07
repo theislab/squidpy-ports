@@ -22,7 +22,8 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 | --- | --- |
 | **Visual comparison** | [Upstream's figure beside ours][comparison] — three real datasets: upstream's published figure beside ours, with the numerical agreement. |
 | **Notebook values comparison** | [Every variable in all 17 upstream notebooks][parity]; the per-variable metrics and manifests behind it are in [`docs/parity/`][parity-data]. |
-| **Reproduce any panel on any GPU box** | [`container/README.md`][container] — one pinned container, no cluster. |
+| **Reproduce any panel on any GPU box** | [`container/README.md`][container] — one pinned container, any GPU box. |
+| **Regenerate the reference bundle** | [Numerical tests][tests-section] — the command, the provenance blob, and the platform caveat that matters before you commit one. |
 | **Numerical tests** | [The test suites][tests-section], layer by layer: [`tests/test_stalign.py`][ports-tests] here guards the generator; the fork's [`test_stalign_reference.py`][ref-tests] and [`test_align.py`][api-tests] assert the port against it. |
 
 The panels are corroboration, not the gate. The gate is the `.npz` bundle this repo emits:
@@ -52,25 +53,9 @@ Upstream is imported by path rather than installed because its `setup.py` reads
 none of which resolve on a current Python. Vendoring makes those pins irrelevant;
 `uv.lock` supplies the reproducibility instead.
 
-Nothing here reimplements upstream. Every value is produced by calling a public upstream
-function or by observing the unmodified `LDDMM` loop through autograd hooks — a
-reimplementation would make *this* repository the thing under test. The single
-documented exception (the four statements computing `LL`/`K`/`DV`, which live inside the
-loop with no function boundary) is quoted verbatim with line references.
-
-## Regenerating the bundle
-
-```bash
-git submodule update --init
-hatch run generate:run --out ../squidpy/tests/_data/stalign_reference
-```
-
-Then commit the bundle in squidpy. Every `.npz` carries a `__provenance__` blob — upstream commit,
-this repo's commit, a checksum of `fixtures.py`, resolved torch/numpy/platform — which squidpy
-asserts on load, so the fixtures stay falsifiable rather than becoming magic numbers.
-
-Determinism has a platform caveat that matters before you commit a bundle: see
-[Numerical tests][tests-section].
+Nothing here reimplements upstream — every value comes from calling a public upstream function or
+observing the unmodified `LDDMM` loop. [Numerical tests][tests-section] has the reasoning, the one
+documented exception, and how to regenerate the bundle.
 
 ## Running the tests
 
@@ -117,8 +102,7 @@ python -m squidpy_ports.stalign.test_report \
 Statuses and expected-failure reasons come from the JUnit XML; each test's description is its own
 docstring, read from the source. Nothing paraphrases a test, so a wrong description is a wrong
 docstring. The raw pytest logs are committed beside the generated table in
-[`docs/_static/tests/`][test-reports]. On the Theislab cluster the container path is
-`.claude/run_tests.sbatch`.
+[`docs/_static/tests/`][test-reports].
 
 ## Contact
 
