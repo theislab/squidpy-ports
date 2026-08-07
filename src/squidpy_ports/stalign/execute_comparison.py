@@ -7,7 +7,9 @@ writing:
 
 * ``<stem>-executed.ipynb`` -- the notebook with the density plot, the upstream-vs-port panel
   and the metric table embedded;
-* ``<stem>-panel.png`` -- the comparison panel on its own;
+* ``<stem>-panel.png`` -- the comparison panel on its own, plus ``<stem>-figure-N.png`` for
+  every figure the notebook drew, so an intermediate one (the port's standalone overlay) can
+  be used as-is rather than cropped out of a composed pair;
 * ``<stem>-manifest.json`` -- the exact package versions **and the squidpy fork commit**, so
   the numbers are never orphaned from the code that produced them.
 
@@ -108,8 +110,13 @@ def execute(notebook: Path, output_dir: Path, *, timeout: int = 5400) -> Path:
         for output in cell.get("outputs", [])
         if "image/png" in output.get("data", {})
     ]
+    for index, encoded in enumerate(panels):
+        (output_dir / f"{stem}-figure-{index}.png").write_bytes(base64.b64decode(encoded))
     if panels:
-        # The comparison panel is the last figure; the density plot comes first.
+        # The comparison panel is the last figure; the density plot comes first. It is written
+        # twice on purpose -- `-panel.png` is the name the docs and container README quote, and
+        # the indexed dump is how the intermediate figures (the port's standalone overlay among
+        # them) get out of the notebook without being cropped back out of a composed pair.
         (output_dir / f"{stem}-panel.png").write_bytes(base64.b64decode(panels[-1]))
 
     manifest = {
