@@ -100,37 +100,11 @@ upstream to ~1e-6 and below (see below).
 
 ## How the port is kept correct
 
-The panels above are real-data evidence, but they are **not** the gating check. Correctness is
-enforced by a layered, seeded reference suite — every stage of the algorithm is asserted against
-values that upstream STalign itself computed:
-
-1. **This repo (`squidpy-ports`)** runs upstream STalign — vendored and pinned to `b2068ed`, never
-   edited — on small **synthetic, seeded** inputs and writes a reference bundle
-   ([`generate.py`](https://github.com/theislab/squidpy-ports/blob/main/src/squidpy_ports/stalign/generate.py)
-   → `.npz` files). Each carries a provenance blob pinned to the upstream commit, so the fixtures
-   stay falsifiable.
-   [`tests/test_stalign.py`](https://github.com/theislab/squidpy-ports/blob/main/tests/test_stalign.py)
-   guards the generator itself: that the vendored checkout is pinned, that the fixtures are
-   deterministic, and that the port's captured **energy and gradient** agree with upstream's LDDMM
-   loop step for step.
-
-2. **squidpy** commits that bundle under `tests/_data/stalign_reference/` and asserts the JAX port
-   reproduces it at every layer —
-   [`test_stalign_reference.py`](https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/methods/test_stalign_reference.py)
-   checks `primitives` (rasterisation) → `energy` → `gradients` → `trajectory` at 1, 5, 50 iterations
-   → `converged` at 500 → image warping, and that every fixture's provenance names upstream `b2068ed`.
-   On the internals the port matches upstream to **near machine precision** (e.g. the LDDMM velocity
-   field to ~1e-15); the ~1e-3 end-to-end figures above come from rasterisation/interpolation at the
-   boundaries, not the fit.
-
-3. **The public API** (`sq.experimental.tl.align`) is covered by
-   [`test_align.py`](https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/tl/test_align.py)
-   — `AnnData`/`SpatialData` in-place vs copy, the path grammar, landmark handling, and recovering a
-   known synthetic shift.
-
-So "alignment is ensured" by asserting the port against upstream at the primitive, energy, gradient,
-trajectory, converged, and image levels — with the real-data panels here as corroboration. Every
-file above is linked: none of this has to be taken on faith from a figure.
+These panels are corroboration, not the gate. The gate is a seeded reference suite that asserts the
+port against upstream at the primitive, energy, gradient, trajectory, converged and image levels —
+the velocity field matches to ~1e-15, and the ~1e-3 figures above come from rasterisation at the
+boundaries, not from the fit. Every test file is linked from
+[How correctness is enforced](correctness.md).
 
 ## Reproducing every panel
 

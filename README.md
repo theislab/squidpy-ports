@@ -58,28 +58,19 @@ reimplementation would make *this* repository the thing under test. The single
 documented exception (the four statements computing `LL`/`K`/`DV`, which live inside the
 loop with no function boundary) is quoted verbatim with line references.
 
-## Regenerating
+## Regenerating the bundle
 
 ```bash
 git submodule update --init
 hatch run generate:run --out ../squidpy/tests/_data/stalign_reference
 ```
 
-Then commit the bundle in squidpy. Every `.npz` carries a `__provenance__` JSON blob
-recording the upstream commit, this repo's commit, a checksum of `fixtures.py`, and the
-resolved torch/numpy/platform — squidpy asserts these on load, so the fixtures stay
-falsifiable rather than becoming magic numbers.
+Then commit the bundle in squidpy. Every `.npz` carries a `__provenance__` blob — upstream commit,
+this repo's commit, a checksum of `fixtures.py`, resolved torch/numpy/platform — which squidpy
+asserts on load, so the fixtures stay falsifiable rather than becoming magic numbers.
 
-### Determinism
-
-Upstream is bit-reproducible on CPU in float64 (no RNG, no dropout, no atomics), *given*
-a fixed reduction order. The `generate` hatch environment pins `OMP_NUM_THREADS=1` and
-`MKL_NUM_THREADS=1`, and the script refuses to run otherwise.
-
-**Reduction order still differs across platforms** (macOS Accelerate vs Linux OpenBLAS).
-squidpy's scheduled job runs on ubuntu, so the committed bundle should be generated on
-ubuntu too: trigger the `generate` workflow and download its artifact rather than
-committing a bundle built on a developer laptop.
+Determinism has a platform caveat that matters before you commit a bundle: see
+[How correctness is enforced][tests-section].
 
 ## Contact
 
@@ -87,7 +78,7 @@ For questions and help requests, you can reach out in the [scverse discourse][].
 If you found a bug, please use the [issue tracker][].
 
 [comparison]: https://squidpy-ports.readthedocs.io/en/latest/stalign-comparison.html
-[tests-section]: https://squidpy-ports.readthedocs.io/en/latest/stalign-comparison.html#how-the-port-is-kept-correct
+[tests-section]: https://squidpy-ports.readthedocs.io/en/latest/correctness.html
 [ports-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_stalign.py
 [ref-tests]: https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/methods/test_stalign_reference.py
 [api-tests]: https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/tl/test_align.py
