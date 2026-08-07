@@ -78,9 +78,13 @@ Full comparison (densities, pointwise Δ): [`stalign-merfish-comparison`](notebo
 
 ### Visium ↔ Visium (affine-only)
 
-Upstream STalign — downloaded (published):
-
-<img src="_static/reference/upstream-visium-visium-affine.png" width="60%" alt="upstream visium published result, downloaded">
+<table width="100%">
+<thead><tr><th width="50%">Upstream STalign — downloaded (published)</th><th width="50%">squidpy JAX port — our run</th></tr></thead>
+<tbody><tr>
+<td><img src="_static/reference/upstream-visium-visium-affine.png" width="100%" alt="upstream visium published result, downloaded"></td>
+<td><img src="_static/comparisons/port-vis-overlay.png" width="100%" alt="squidpy port visium result, our run"></td>
+</tr></tbody>
+</table>
 
 | metric | value |
 |---|---|
@@ -89,10 +93,12 @@ Upstream STalign — downloaded (published):
 | fixed-NN median, upstream / port | 0.483 / 0.468 |
 | warped density, relative L2 | 1.6 × 10⁻² |
 
-No paired port figure here: upstream's Visium overlay cell errors under the GPU build (a documented
-upstream/env quirk), so the parity replay skips it. The affine transform still matches upstream to
-~1e-6, and the port's own densities + aligned points are in the full run:
-[`stalign-visium-affine-comparison`](notebooks/stalign-visium-affine-comparison).
+Full comparison (densities, pointwise Δ): [`stalign-visium-affine-comparison`](notebooks/stalign-visium-affine-comparison).
+
+Upstream's Visium overlay cell errors under the GPU build, so unlike the two above, this port
+figure is not lifted from the parity replay — the curated notebook redraws upstream's published
+figure itself (unaligned left, aligned right) with squidpy's fit substituted for upstream's. Same
+plot, same alphas, same labels; only the transform differs.
 
 The residual differences above are the deliberately documented rasterisation and boundary-condition
 effects at tissue edges — not disagreement in the fitted transform, whose internals agree with
