@@ -6,6 +6,6 @@
 :hidden: true
 :maxdepth: 1
 
-stalign-comparison.md
-parity.md
+Upstream vs the port <stalign-comparison.md>
+Parity: all 17 notebooks <parity.md>
 ```

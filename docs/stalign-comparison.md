@@ -144,9 +144,8 @@ and `squidpy_commit` — so a result is never separated from the code that produ
 ```{toctree}
 :hidden: true
 :maxdepth: 1
-:caption: Full runs behind this page
 
-notebooks/stalign-xenium-comparison
-notebooks/stalign-merfish-comparison
-notebooks/stalign-visium-affine-comparison
+Xenium ↔ Xenium <notebooks/stalign-xenium-comparison>
+MERFISH ↔ MERFISH <notebooks/stalign-merfish-comparison>
+Visium ↔ Visium (affine) <notebooks/stalign-visium-affine-comparison>
 ```

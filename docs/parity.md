@@ -56,23 +56,22 @@ by the full-suite rerun rather than edited by hand.
 ```{toctree}
 :hidden: true
 :maxdepth: 1
-:caption: Executed replays
 
-notebooks/stalign-upstream/heart-alignment
-notebooks/stalign-upstream/heart-alignment-varying-thickness
-notebooks/stalign-upstream/merfish-merfish-alignment
-notebooks/stalign-upstream/merfish-merfish-alignment-affine-only
-notebooks/stalign-upstream/merfish-merfish-alignment-affine-only-with-points
-notebooks/stalign-upstream/merfish-merfish-alignment-simulation
-notebooks/stalign-upstream/merfish-merfish-alignment-using-L-T
-notebooks/stalign-upstream/merfish-visium-alignment
-notebooks/stalign-upstream/merfish-visium-alignment-with-curve-annotator
-notebooks/stalign-upstream/merfish-visium-alignment-with-point-annotator
-notebooks/stalign-upstream/merfish-xenium-alignment
-notebooks/stalign-upstream/visium-visium-alignment-affine-only
-notebooks/stalign-upstream/xenium-heimage-alignment
-notebooks/stalign-upstream/xenium-starmap-alignment
-notebooks/stalign-upstream/xenium-xenium-alignment
-notebooks/stalign-upstream/merfish-allen3Datlas-alignment
-notebooks/stalign-upstream/starmap-allen3Datlas-alignment
+heart-alignment <notebooks/stalign-upstream/heart-alignment>
+heart-alignment-varying-thickness <notebooks/stalign-upstream/heart-alignment-varying-thickness>
+merfish-merfish-alignment <notebooks/stalign-upstream/merfish-merfish-alignment>
+merfish-merfish-alignment-affine-only <notebooks/stalign-upstream/merfish-merfish-alignment-affine-only>
+merfish-merfish-alignment-affine-only-with-points <notebooks/stalign-upstream/merfish-merfish-alignment-affine-only-with-points>
+merfish-merfish-alignment-simulation <notebooks/stalign-upstream/merfish-merfish-alignment-simulation>
+merfish-merfish-alignment-using-L-T <notebooks/stalign-upstream/merfish-merfish-alignment-using-L-T>
+merfish-visium-alignment <notebooks/stalign-upstream/merfish-visium-alignment>
+merfish-visium-alignment-with-curve-annotator <notebooks/stalign-upstream/merfish-visium-alignment-with-curve-annotator>
+merfish-visium-alignment-with-point-annotator <notebooks/stalign-upstream/merfish-visium-alignment-with-point-annotator>
+merfish-xenium-alignment <notebooks/stalign-upstream/merfish-xenium-alignment>
+visium-visium-alignment-affine-only <notebooks/stalign-upstream/visium-visium-alignment-affine-only>
+xenium-heimage-alignment <notebooks/stalign-upstream/xenium-heimage-alignment>
+xenium-starmap-alignment <notebooks/stalign-upstream/xenium-starmap-alignment>
+xenium-xenium-alignment <notebooks/stalign-upstream/xenium-xenium-alignment>
+merfish-allen3Datlas-alignment <notebooks/stalign-upstream/merfish-allen3Datlas-alignment>
+starmap-allen3Datlas-alignment <notebooks/stalign-upstream/starmap-allen3Datlas-alignment>
 ```
