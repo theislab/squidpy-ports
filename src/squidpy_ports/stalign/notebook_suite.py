@@ -910,19 +910,42 @@ def landmark_affine(source: np.ndarray, target: np.ndarray) -> tuple[np.ndarray,
     return matrix[:2, :2], matrix[:2, 2]
 
 
-def _initial_affine_row_col(converted: dict[str, Any]) -> np.ndarray:
-    """The notebook's starting affine as one homogeneous matrix, in row-col order.
+def _reversed_points(points: Any) -> np.ndarray | None:
+    """Upstream's row-col landmarks as the ``(x, y)`` the public API takes.
+
+    Same boundary as :func:`_initial_affine_xy` and the same omission: upstream's ``pointsI``
+    and ``pointsJ`` are row-col -- the reference generator passes ``landmarks_query_rc`` --
+    while ``landmarks_ref``/``landmarks_query`` are public coordinates and so are ``(x, y)``,
+    which ``_initial_affine_and_landmarks`` reverses on the way in. Measured on the image
+    fixture with five landmarks: reversed here agrees with upstream to **3.3e-12**, left
+    row-col it is **0.37** away.
+    """
+    return None if points is None else np.asarray(points, dtype=float)[:, ::-1]
+
+
+def _initial_affine_xy(converted: dict[str, Any]) -> np.ndarray:
+    """The notebook's starting affine as one homogeneous matrix, in ``(x, y)`` order.
 
     ``_convert_kwargs`` splits upstream's ``A`` (or its ``L``/``T`` pair) into a linear part
     and a translation because the kernel took them separately. The public API takes one
     ``initial_affine``, so they are recombined here.
+
+    The order matters and used to be wrong. Upstream works in row-col ``(y, x)``, while
+    ``initial_affine`` is a *public* coordinate and so is ``(x, y)`` --
+    ``_initial_affine_and_landmarks`` calls ``affine_xy_to_rc`` on it itself. Handing it a
+    row-col matrix converted it a second time; measured on the image fixture, that alone put
+    the fitted affine **0.53** relative away from upstream, where the corrected order agrees
+    to **1.7e-12**. Reversing the *spatial* axes is a permutation of the first two rows and
+    columns, not a plain ``[::-1, ::-1]``, which would move the homogeneous row too -- the
+    same reasoning as :func:`_initial_affine_xyz`, which had it right at rank 3.
     """
     linear = np.asarray(converted.pop("L"), dtype=float)
     translation = np.asarray(converted.pop("T"), dtype=float)
     affine = np.eye(linear.shape[0] + 1, dtype=float)
     affine[: linear.shape[0], : linear.shape[1]] = linear
     affine[: translation.size, -1] = translation
-    return affine
+    swap = np.eye(affine.shape[0])[[1, 0, 2]]
+    return swap @ affine @ swap
 
 
 def _require_same_cells_ran(notebook: str, upstream_pass: _ReplayPass, squidpy_pass: _ReplayPass) -> str | None:
@@ -1041,16 +1064,25 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
     def squidpy_fit(args: tuple[Any, ...], kwargs: dict[str, Any], original: Any) -> Any:
         import jax
 
-        source_axes = tuple(_numpy(axis) for axis in args[0])
-        target_axes = tuple(_numpy(axis) for axis in args[2])
+        source_axes = tuple(_numpy(axis) for axis in args[0])  # upstream's `xI`: the moving image
+        target_axes = tuple(_numpy(axis) for axis in args[2])  # upstream's `xJ`: the fixed image
         converted = _convert_kwargs(_capped(kwargs), PORT_PARAMETERS)
-        landmarks_ref = converted.pop("points_source", None)
-        landmarks_query = converted.pop("points_target", None)
-        initial_affine = _initial_affine_row_col(converted)
+        # `query` is the moving side at rank 2 -- `_stalign.py` reads `source_image =
+        # as_chw(query)`, and `_initial_affine_and_landmarks` sends `landmarks_query` to the
+        # source. So upstream's `I`/`pointsI` go in as the *query* and `J`/`pointsJ` as the
+        # reference. This was inverted, and rank 3 is the opposite convention (there the
+        # volume is `ref` and does move), which is presumably how it survived: the two
+        # mirrored mistakes nearly cancel whenever `I` and `J` are similar-sized rasters on
+        # centred pixel axes, which is fourteen of the seventeen notebooks. They do not
+        # cancel for `xenium-heimage-alignment`, whose H&E is in pixels against a density in
+        # microns -- there the velocity grid came out 48x66 against upstream's 17x23.
+        landmarks_query = _reversed_points(converted.pop("points_source", None))
+        landmarks_ref = _reversed_points(converted.pop("points_target", None))
+        initial_affine = _initial_affine_xy(converted)
         accepted = solver_keys()
         fit = align_stalign_image(
-            as_sdata(_channels_first(args[1], ndim=2), source_axes),
             as_sdata(_channels_first(args[3], ndim=2), target_axes),
+            as_sdata(_channels_first(args[1], ndim=2), source_axes),
             image_key=_IMAGE_KEY,
             landmarks_ref=landmarks_ref,
             landmarks_query=landmarks_query,

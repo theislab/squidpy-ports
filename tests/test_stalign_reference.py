@@ -35,6 +35,7 @@ from squidpy.experimental.im import sample_volume  # noqa: E402
 from squidpy.experimental.tl import (  # noqa: E402
     Stalign2DResult,
     Stalign3DResult,
+    align_stalign_image,
     align_stalign_obs,
 )
 
@@ -784,6 +785,61 @@ _IMAGE_ITERS = 12
 @pytest.fixture(scope="session")
 def image_reference(bundle):
     return _load(bundle, "image_trajectory")
+
+
+def _harness_shaped_fit(fixture, *, swap_roles=False):
+    """The image fit exactly as ``notebook_suite._compare_lddmm`` issues it.
+
+    Through the harness's own `as_sdata` / `_initial_affine_xy` rather than a second copy of
+    them, so this fails if either drifts.
+    """
+    from squidpy_ports.stalign.notebook_suite import (
+        _IMAGE_KEY,
+        _channels_first,
+        _initial_affine_xy,
+        as_sdata,
+    )
+
+    ax_moving = (fixture["source_axis_0"], fixture["source_axis_1"])
+    ax_fixed = (fixture["target_axis_0"], fixture["target_axis_1"])
+    moving = as_sdata(_channels_first(fixture["query"], ndim=2), ax_moving)
+    fixed = as_sdata(_channels_first(fixture["ref"], ndim=2), ax_fixed)
+    affine = _initial_affine_xy({"L": np.asarray(fixture["start_L"]), "T": np.asarray(fixture["start_T"])})
+    # `query` is the moving side, so upstream's `I` goes in second. Swapped on request, which
+    # is what this guards against.
+    first, second = (moving, fixed) if swap_roles else (fixed, moving)
+    return align_stalign_image(
+        first, second, image_key=_IMAGE_KEY, initial_affine=affine, niter=_IMAGE_ITERS, **_IMAGE_PARAMS
+    )
+
+
+def test_replay_image_call_reproduces_upstream(image_reference, record_property):
+    """The call the notebook replay actually issues, against upstream's own result.
+
+    The gap this closes: the reference suite pinned ``_core.lddmm`` and ``fit_stalign_image``
+    against upstream, and the harness pinned its keyword conversion, but nothing checked the
+    *composition* -- that the replay hands the public entry point the arguments it means to.
+    It did not. Upstream's moving image went in as ``ref`` (the fixed side), its row-col
+    landmarks went in as ``(x, y)``, and its row-col starting affine went into a parameter
+    that reverses the axes itself. Three mirrored errors, largely self-cancelling on the
+    fourteen notebooks whose two images are alike, and not at all on the one where they are
+    not (ledger row D12).
+    """
+    fit = _harness_shaped_fit(image_reference)
+    error = rel(fit.affine, image_reference["A"])
+    record_property("rel_error", error)
+    assert error < 1e-10, f"the replay's own call disagrees with upstream by {error:.3e}"
+
+
+def test_replay_image_call_is_role_sensitive(image_reference):
+    """Swapping ref and query must be *loud*, not a 1e-5 wobble.
+
+    The original inversion survived because its effect was small wherever the two images were
+    similar. Asserting the swap disagrees grossly is what keeps that from being reintroduced
+    and absorbed into a tolerance.
+    """
+    swapped = _harness_shaped_fit(image_reference, swap_roles=True)
+    assert rel(swapped.affine, image_reference["A"]) > 1e-3
 
 
 @pytest.fixture(scope="session")
