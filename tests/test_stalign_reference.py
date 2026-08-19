@@ -276,7 +276,7 @@ def test_fixture_stays_inside_velocity_grid(primitives, velocity_grid):
 def test_interp_matches_upstream(primitives, source_grid, record_property):
     """``_interp`` vs ``STalign.interp(padding_mode='border')``."""
     axes, image = source_grid
-    got = _core._interp(axes, image, jnp.asarray(primitives["interp_coords"]))
+    got = _core.interp(axes, image, jnp.asarray(primitives["interp_coords"]))
     error = rel(got, primitives["interp_border"])
     record_property("rel_error", error)
     assert error < EXACT
@@ -299,7 +299,7 @@ def test_regularizer_matches_upstream(primitives, velocity_grid, record_property
         assert error < EXACT, name
 
 
-def test_transform_grid_backward_matches_upstream(primitives, target_grid, velocity_grid, record_property):
+def test_transform_grid_backward_matches_upstream(primitives, source_grid, target_grid, velocity_grid, record_property):
     """``Stalign2DResult.deformation_grid(direction='backward')`` vs ``STalign.build_transform('b')``.
 
     This is the inner loop of the objective: invert the affine, then integrate ``-v``
@@ -310,12 +310,15 @@ def test_transform_grid_backward_matches_upstream(primitives, target_grid, veloc
     approximation for plotting".
     """
     axes, _ = target_grid
+    query_axes, _ = source_grid
     result = Stalign2DResult(
         affine=jnp.asarray(primitives["to_A"]),
         velocity=jnp.asarray(primitives["velocity"]),
         velocity_grid=velocity_grid,
     )
-    got = result.deformation_grid(direction="backward", query_axes=axes)
+    # Backward evaluates the *reference* grid in the query frame, so the grid under test
+    # goes in as `ref_axes`; the query side is only there to satisfy the guard.
+    got = result.deformation_grid(direction="backward", query_axes=query_axes, ref_axes=axes)
     error = rel(np.moveaxis(np.asarray(got), 0, -1), primitives["grid_backward"])
     record_property("rel_error", error)
     assert error < EXACT
@@ -338,7 +341,7 @@ def test_warp_image_uses_the_upstream_grid(primitives, source_grid, target_grid,
         ref_axes=target_axes,
     )
     upstream_grid = jnp.asarray(np.moveaxis(np.asarray(primitives["grid_backward"]), -1, 0))
-    expected = _core._interp(source_axes, source_image, upstream_grid)
+    expected = _core.interp(source_axes, source_image, upstream_grid)
 
     error = rel(result.warp_image(source_image), expected)
     record_property("rel_error", error)
@@ -581,14 +584,14 @@ def test_backward_transform_inverts_better(fitted, primitives, record_property):
 )
 def test_interp_outside_domain_matches_upstream(primitives, source_grid):
     axes, image = source_grid
-    got = _core._interp(axes, image, jnp.asarray(primitives["interp_coords_outside"]))
+    got = _core.interp(axes, image, jnp.asarray(primitives["interp_coords_outside"]))
     assert rel(got, primitives["interp_zeros_outside"]) < EXACT
 
 
 def test_interp_outside_domain_is_border_padding(primitives, source_grid, record_property):
     """The positive half of D5: squidpy's behaviour is exactly upstream's 'border' mode."""
     axes, image = source_grid
-    got = _core._interp(axes, image, jnp.asarray(primitives["interp_coords_outside"]))
+    got = _core.interp(axes, image, jnp.asarray(primitives["interp_coords_outside"]))
     error = rel(got, primitives["interp_border_outside"])
     record_property("rel_error", error)
     assert error < EXACT
@@ -918,7 +921,9 @@ def test_converged_solution_matches_upstream(bundle, primitives, record_property
     snapshot = _load(bundle, "converged_n500")
     result = _run_lddmm(primitives, snapshot, 500)
 
-    energy = rel(result["E"], snapshot["E_last"])
+    # `lddmm` returns the whole per-iteration trace now; the last completed step is the
+    # one upstream's `E_last` records.
+    energy = rel(result["energies"][result["n_iter"] - 1], snapshot["E_last"])
     record_property("rel_error_E", energy)
     assert energy < 0.01, f"final energy differs by {energy:.3%}"
 
@@ -1040,7 +1045,7 @@ def test_slice_interp_matches_upstream(slice_reference, slice_axes, order, key, 
     """
     reference, _ = slice_axes
     grid = jnp.asarray(np.moveaxis(np.asarray(slice_reference["grid_backward"]), -1, 0))
-    got = _core._interp(reference, jnp.asarray(slice_reference["ref"]), grid, order=order)
+    got = _core.interp(reference, jnp.asarray(slice_reference["ref"]), grid, order=order)
     error = rel(got, slice_reference[key])
     record_property("rel_error", error)
     assert error < EXACT

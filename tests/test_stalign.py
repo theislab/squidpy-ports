@@ -1195,3 +1195,32 @@ def test_numpy_shim_only_touches_device_tensors_and_restores_itself():
         with pytest.raises(RuntimeError):
             torch.tensor([1.0], requires_grad=True).numpy()
     assert torch.Tensor.numpy is before, "the shim outlived the replay"
+
+
+def test_paired_frames_align_the_two_passes_row_for_row():
+    """Both passes' frames, merged so a disagreeing cell can be pointed at.
+
+    The metric says 46% of cells changed region; only the rows say which, and that is what
+    separates boundary displacement from something worse. A pass whose frame is a different
+    shape is not comparable and must be dropped rather than merged into misaligned rows --
+    upstream's own frames are rebuilt per pass, so a non-default index is the normal case,
+    not the exception.
+    """
+    import pandas as pd
+
+    from squidpy_ports.stalign.notebook_suite import _paired_frames
+
+    upstream_df = pd.DataFrame({"acronym": ["VISp4", "VISp5"], "coord0": [1.0, 2.0]})
+    squidpy_df = pd.DataFrame({"acronym": ["VISp4", "VISp6"], "coord0": [1.5, 2.5]}, index=[7, 9])
+
+    paired = _paired_frames({"df": upstream_df}, {"df": squidpy_df})["df"]
+    assert list(paired.columns) == ["upstream_acronym", "upstream_coord0", "squidpy_acronym", "squidpy_coord0"]
+    # the reindex is the point: row 1 must pair VISp5 with VISp6, not with a NaN
+    assert paired.loc[1, "upstream_acronym"] == "VISp5"
+    assert paired.loc[1, "squidpy_acronym"] == "VISp6"
+    disagree = paired["upstream_acronym"] != paired["squidpy_acronym"]
+    assert disagree.tolist() == [False, True]
+
+    # shape mismatches carry no row correspondence at all
+    assert _paired_frames({"df": upstream_df}, {"df": squidpy_df.head(1)}) == {}
+    assert _paired_frames({"df": upstream_df}, {"df": squidpy_df.rename(columns={"coord0": "coord1"})}) == {}

@@ -118,6 +118,10 @@ class ComparisonResult:
     #: written notebook read as upstream's own cells (code + output) rather than opaque
     #: ``result.figures[N]`` dumps. Empty for synthetic status panels.
     figure_sources: list[str] = field(default_factory=list)
+    #: Per-cell frames both passes carry, merged side by side -- see :func:`_paired_frames`.
+    #: Written beside the metrics so a label disagreement can be located in space instead of
+    #: only counted.
+    paired_frames: dict[str, Any] = field(default_factory=dict)
     #: The squidpy half of each pair, as its own PNG, parallel to ``figures``. The docs pages
     #: show the port's plot beside upstream's *published* figure rather than beside our replay
     #: of it, so they need the port panel alone -- cropping it back out of the composed pair
@@ -505,6 +509,38 @@ def _frame_metrics(name: str, expected: Any, actual: Any) -> dict[str, float]:
     return metrics
 
 
+def _paired_frames(upstream_ns: dict[str, Any], squidpy_ns: dict[str, Any]) -> dict[str, Any]:
+    """The frames both passes computed, merged column-wise with an ``upstream_``/``squidpy_`` prefix.
+
+    ``_frame_metrics`` reduces these to one number per column, which answers *how many* cells
+    changed region but never *which* ones. That distinction is the whole question for the
+    volume-to-section notebooks: the acronym is a nearest-voxel lookup into a 50 micron
+    annotation volume, so cells displaced by one or two voxels are expected to flip label at a
+    region boundary and nowhere else. Only the per-cell rows can show whether the disagreement
+    sits on boundaries or is spread through region interiors -- the second would mean something
+    other than displacement is wrong.
+
+    Emitted for every notebook that carries a frame; the 3D ones are simply the only ones where
+    it currently says anything.
+    """
+    paired: dict[str, Any] = {}
+    for name, upstream_value in sorted(upstream_ns.items()):
+        if name.startswith("_") or name in _INPUT_NAMES or name not in squidpy_ns:
+            continue
+        actual = squidpy_ns[name]
+        if not (hasattr(upstream_value, "columns") and hasattr(actual, "columns")):
+            continue
+        if list(upstream_value.columns) != list(actual.columns) or len(upstream_value) != len(actual):
+            continue
+        import pandas as pd
+
+        paired[name] = pd.concat(
+            [upstream_value.add_prefix("upstream_"), actual.add_prefix("squidpy_").set_axis(upstream_value.index)],
+            axis=1,
+        )
+    return paired
+
+
 def _namespace_metrics(upstream_ns: dict[str, Any], squidpy_ns: dict[str, Any]) -> dict[str, float]:
     """Relative L2 on every array the notebook itself computed, under its own variable name.
 
@@ -598,6 +634,16 @@ PORT_DEFAULTS: dict[str, Any] = {
     "muB": None,
     "tol": None,
     "patience": 25,
+    # squidpy's `_CONSUMED_KEYS`: declared by the public solver TypedDicts but eaten by the
+    # `align_stalign_*` entry points rather than forwarded to the solver. Mirrored for the
+    # types alone -- upstream's `LDDMM` has no such keywords (it is handed images that were
+    # rasterized outside the fit), so nothing captured ever carries them, and
+    # `_completed_kwargs` cannot fill them either: they are absent from `_SOLVER_DEFAULTS`.
+    # `initial_affine` is the exception the call site already passes by hand.
+    "dx": 30.0,
+    "blur": (2.0, 1.0, 0.5),
+    "raster_expand": 1.1,
+    "initial_affine": None,
 }
 PORT_PARAMETERS: Mapping[str, inspect.Parameter] = {
     name: inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=default)
@@ -1075,6 +1121,7 @@ def _pair_passes(notebook: str, upstream_fit: Any, squidpy_fit: Any, *, function
         figures=figures,
         figure_sources=figure_sources,
         port_figures=port_figures,
+        paired_frames=_paired_frames(upstream_pass.namespace, squidpy_pass.namespace),
         upstream_seconds=upstream_pass.seconds,
         squidpy_seconds=squidpy_pass.seconds,
         note=" ".join(filter(None, (UPSTREAM_NOTES.get(notebook), skipped_note))) or None,
@@ -1519,6 +1566,10 @@ def write_result(result: ComparisonResult, output_dir: Path) -> None:
         # rescaled into the pair. Re-encoding it through matplotlib would only lose pixels.
         (output_dir / f"{stem}-port{'' if index == 0 else f'-{index}'}.png").write_bytes(png)
     (output_dir / f"{stem}-metrics.json").write_text(json.dumps(result.metrics, indent=2, sort_keys=True) + "\n")
+    for name, frame in result.paired_frames.items():
+        # CSV rather than parquet: these are read by hand as often as by code, and the largest
+        # is a few MB. Compressed because Lustre would rather have one small file than one big.
+        frame.to_csv(output_dir / f"{stem}-cells-{name}.csv.gz", index=False)
     manifest = _manifest(result.notebook, result.status, result.note, result.upstream_seconds, result.squidpy_seconds)
     (output_dir / f"{stem}-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
