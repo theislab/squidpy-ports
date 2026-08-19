@@ -1,5 +1,5 @@
 {
-  "host": "supergpu17.scidom.de",
+  "host": "supergpu22.scidom.de",
   "note": "Both passes skipped 6 cell(s) unrelated to the fit -- cell 30: RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!; cell 31: NameError: name 'muA' is not defined; cell 35: RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!; cell 36: NameError: name 'muA' is not defined; cell 37: RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!; cell 38: NameError: name 'muA' is not defined",
   "notebook": "merfish-visium-alignment.ipynb",
   "packages": {
@@ -10,10 +10,10 @@
     "torch": "2.13.0"
   },
   "python": "3.13.14",
-  "slurm_job_id": "39589020",
-  "squidpy_commit": "9735ba3c8198ba279f3f688df92ba5a6876e28c4",
-  "squidpy_seconds": 7.446583133016247,
+  "slurm_job_id": "39747945",
+  "squidpy_commit": "2bff194fc5fa9ff3fe41816af14f745609c8bada",
+  "squidpy_seconds": 8.921301495982334,
   "status": "compared",
-  "upstream_seconds": 241.3569098500302,
+  "upstream_seconds": 228.26690950000193,
   "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }

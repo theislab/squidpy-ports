@@ -14,23 +14,38 @@ separated from the code that produced it.
 
 | notebook | status | largest divergence | upstream | squidpy |
 | --- | --- | --- | --- | --- |
-| [`merfish-allen3Datlas-alignment`](notebooks/stalign-upstream/merfish-allen3Datlas-alignment) | compared | `v` = `1.9e+00` | 86s | 18s |
-| [`starmap-allen3Datlas-alignment`](notebooks/stalign-upstream/starmap-allen3Datlas-alignment) | compared | `AI` = `9.5e-01` | 44s | 16s |
-| [`xenium-heimage-alignment`](notebooks/stalign-upstream/xenium-heimage-alignment) | compared | `v` = `1.9e-01` | 163s | 7s |
-| [`merfish-visium-alignment-with-point-annotator`](notebooks/stalign-upstream/merfish-visium-alignment-with-point-annotator) | compared | `testM` = `5.5e-03` | 236s | 9s |
-| [`merfish-merfish-alignment-affine-only`](notebooks/stalign-upstream/merfish-merfish-alignment-affine-only) | compared | `A` = `6.3e-04` | 59s | 5s |
-| [`xenium-starmap-alignment`](notebooks/stalign-upstream/xenium-starmap-alignment) | compared | `A` = `3.0e-04` | 165s | 4s |
-| [`merfish-visium-alignment`](notebooks/stalign-upstream/merfish-visium-alignment) | compared | `phiI` = `2.9e-04` | 241s | 7s |
-| [`merfish-merfish-alignment-simulation`](notebooks/stalign-upstream/merfish-merfish-alignment-simulation) | compared | `A` = `2.4e-04` | 65s | 3s |
-| [`xenium-xenium-alignment`](notebooks/stalign-upstream/xenium-xenium-alignment) | compared | `phiiJ` = `1.3e-04` | 11s | 5s |
-| [`heart-alignment`](notebooks/stalign-upstream/heart-alignment) | compared | `A` = `4.9e-05` | 47s | 6s |
-| [`heart-alignment-varying-thickness`](notebooks/stalign-upstream/heart-alignment-varying-thickness) | compared | `A` = `2.4e-05` | 39s | 3s |
-| [`merfish-xenium-alignment`](notebooks/stalign-upstream/merfish-xenium-alignment) | compared | `A` = `2.4e-05` | 590s | 14s |
-| [`merfish-merfish-alignment-using-L-T`](notebooks/stalign-upstream/merfish-merfish-alignment-using-L-T) | compared | `phiiJ` = `1.3e-05` | 800s | 17s |
-| [`merfish-merfish-alignment`](notebooks/stalign-upstream/merfish-merfish-alignment) | compared | `A` = `9.8e-06` | 404s | 7s |
-| [`visium-visium-alignment-affine-only`](notebooks/stalign-upstream/visium-visium-alignment-affine-only) | compared | `A` = `1.0e-06` | 42s | 3s |
-| [`merfish-merfish-alignment-affine-only-with-points`](notebooks/stalign-upstream/merfish-merfish-alignment-affine-only-with-points) | compared-affine | `squidpy landmark residual` = `6.5e+02` | — | — |
+| [`merfish-allen3Datlas-alignment`](notebooks/stalign-upstream/merfish-allen3Datlas-alignment) | compared | `v` = `1.8e+00` | 104s | 19s |
+| [`starmap-allen3Datlas-alignment`](notebooks/stalign-upstream/starmap-allen3Datlas-alignment) | compared | `v` = `9.0e-01` | 36s | 14s |
+| [`xenium-heimage-alignment`](notebooks/stalign-upstream/xenium-heimage-alignment) | compared | `v` = `2.8e-01` | 143s | 7s |
+| [`merfish-visium-alignment-with-point-annotator`](notebooks/stalign-upstream/merfish-visium-alignment-with-point-annotator) | compared | `testM` = `5.6e-03` | 229s | 8s |
+| [`merfish-merfish-alignment-affine-only`](notebooks/stalign-upstream/merfish-merfish-alignment-affine-only) | compared | `A` = `6.3e-04` | 58s | 7s |
+| [`merfish-visium-alignment`](notebooks/stalign-upstream/merfish-visium-alignment) | compared | `phiI` = `3.1e-04` | 228s | 9s |
+| [`xenium-starmap-alignment`](notebooks/stalign-upstream/xenium-starmap-alignment) | compared | `A` = `3.0e-04` | 179s | 7s |
+| [`merfish-merfish-alignment-simulation`](notebooks/stalign-upstream/merfish-merfish-alignment-simulation) | compared | `A` = `2.4e-04` | 56s | 6s |
+| [`xenium-xenium-alignment`](notebooks/stalign-upstream/xenium-xenium-alignment) | compared | `phiiJ` = `1.3e-04` | 10s | 6s |
+| [`heart-alignment`](notebooks/stalign-upstream/heart-alignment) | compared | `A` = `4.9e-05` | 50s | 6s |
+| [`heart-alignment-varying-thickness`](notebooks/stalign-upstream/heart-alignment-varying-thickness) | compared | `A` = `2.4e-05` | 44s | 7s |
+| [`merfish-xenium-alignment`](notebooks/stalign-upstream/merfish-xenium-alignment) | compared | `A` = `2.4e-05` | 628s | 15s |
+| [`merfish-merfish-alignment-using-L-T`](notebooks/stalign-upstream/merfish-merfish-alignment-using-L-T) | compared | `phiiJ` = `1.3e-05` | 920s | 23s |
+| [`merfish-merfish-alignment`](notebooks/stalign-upstream/merfish-merfish-alignment) | compared | `A` = `9.8e-06` | 408s | 9s |
+| [`visium-visium-alignment-affine-only`](notebooks/stalign-upstream/visium-visium-alignment-affine-only) | compared | `A` = `1.0e-06` | 34s | 6s |
+| [`merfish-merfish-alignment-affine-only-with-points`](notebooks/stalign-upstream/merfish-merfish-alignment-affine-only-with-points) | compared-affine | `treAffine` = `3.6e-02` | — | — |
 | [`merfish-visium-alignment-with-curve-annotator`](notebooks/stalign-upstream/merfish-visium-alignment-with-curve-annotator) | unreplayable-upstream | — | — | — |
+
+The divergence column ranks *relative* L2 only. The `compared-affine` row's two landmark
+residuals — upstream `644.3`, squidpy `645.0` — are absolute distances in coordinate units,
+and reporting the larger of them as that row's divergence put `6.5e+02` at the top of a table
+for two fits that agree to 0.11%. They stay in its metrics JSON, where the pair can be read
+together. Its largest actual divergence is the target registration error of the landmark
+affine, `treAffine`.
+
+`xenium-heimage-alignment` leads the two-dimensional rows and is the one notebook with a
+divergence that is neither machine precision nor D11. Its `2.8e-01` is also the first honest
+number it has had: until [ledger row D12](STALIGN_DIVERGENCES.md) was fixed, this replay
+handed squidpy the moving and fixed images the wrong way round, and the earlier and smaller
+`1.9e-01` came from a velocity grid that had collapsed to 2×3 — near-rigid, so near-affine,
+so accidentally close to upstream. Correcting it left the other sixteen rows unchanged to the
+precision shown, which is what three self-cancelling conventions look like from the outside.
 
 ## Against upstream's published output
 
@@ -44,12 +59,12 @@ passes against each other.
 
 | notebook | upstream vs published | squidpy vs published |
 | --- | --- | --- |
-| [`merfish-merfish-alignment-affine-only`](notebooks/stalign-upstream/merfish-merfish-alignment-affine-only) | `2.1e-16` | `1.8e-06` |
-| [`merfish-merfish-alignment`](notebooks/stalign-upstream/merfish-merfish-alignment) | `6.4e-03` | `6.4e-03` |
-| [`merfish-merfish-alignment-using-L-T`](notebooks/stalign-upstream/merfish-merfish-alignment-using-L-T) | `2.4e-16` | `4.6e-07` |
-| [`merfish-visium-alignment`](notebooks/stalign-upstream/merfish-visium-alignment) | `1.1e-06` | `1.4e-05` |
-| [`merfish-visium-alignment-with-point-annotator`](notebooks/stalign-upstream/merfish-visium-alignment-with-point-annotator) | `1.7e-06` | `2.6e-05` |
-| [`visium-visium-alignment-affine-only`](notebooks/stalign-upstream/visium-visium-alignment-affine-only) | `1.8e-16` | `3.6e-08` |
+| `merfish-merfish-alignment-affine-only` | `2.1e-16` | `1.8e-06` |
+| `merfish-merfish-alignment` | `6.4e-03` | `6.4e-03` |
+| `merfish-merfish-alignment-using-L-T` | `2.0e-16` | `4.6e-07` |
+| `merfish-visium-alignment` | `1.1e-06` | `1.4e-05` |
+| `merfish-visium-alignment-with-point-annotator` | `1.5e-06` | `2.7e-05` |
+| `visium-visium-alignment-affine-only` | `1.8e-16` | `3.6e-08` |
 
 ## Notes recorded during the run
 

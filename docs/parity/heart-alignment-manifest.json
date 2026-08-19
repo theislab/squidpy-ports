@@ -1,5 +1,5 @@
 {
-  "host": "supergpu24.scidom.de",
+  "host": "supergpu17.scidom.de",
   "note": null,
   "notebook": "heart-alignment.ipynb",
   "packages": {
@@ -10,10 +10,10 @@
     "torch": "2.13.0"
   },
   "python": "3.13.14",
-  "slurm_job_id": "39587734",
-  "squidpy_commit": "9735ba3c8198ba279f3f688df92ba5a6876e28c4",
-  "squidpy_seconds": 5.5718945389962755,
+  "slurm_job_id": "39747876",
+  "squidpy_commit": "2bff194fc5fa9ff3fe41816af14f745609c8bada",
+  "squidpy_seconds": 6.258998601988424,
   "status": "compared",
-  "upstream_seconds": 47.12911099399207,
+  "upstream_seconds": 49.81097142898943,
   "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }

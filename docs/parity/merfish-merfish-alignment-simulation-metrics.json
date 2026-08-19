@@ -1,11 +1,22 @@
 {
-  "A relative L2": 0.0002432595175732692,
+  "A relative L2": 0.0002432595175773683,
+  "df1[Unnamed: 0] label disagreement": 0.0,
+  "df1[Unnamed: 0] label set jaccard": 1.0,
+  "df1[Unnamed: 0] labels only squidpy": 0.0,
+  "df1[Unnamed: 0] labels only upstream": 0.0,
+  "df1[center_x] median abs delta": 0.0,
+  "df1[center_y] median abs delta": 0.0,
+  "df1[max_x] median abs delta": 0.0,
+  "df1[max_y] median abs delta": 0.0,
+  "df1[min_x] median abs delta": 0.0,
+  "df1[min_y] median abs delta": 0.0,
+  "df1[volume] median abs delta": 0.0,
   "extentI relative L2": 0.0,
   "extentJ relative L2": 0.0,
-  "tpointsI relative L2": 1.5740866326324597e-06,
-  "v relative L2": 1.6727218135598042e-15,
+  "tpointsI relative L2": 1.5740866326340773e-06,
+  "v relative L2": 4.648842917575762e-15,
   "xI0 relative L2": 0.0,
-  "xI_LDDMM relative L2": 1.9972502602447386e-07,
+  "xI_LDDMM relative L2": 1.997250260237711e-07,
   "yI0 relative L2": 0.0,
-  "yI_LDDMM relative L2": 2.606873261082365e-06
+  "yI_LDDMM relative L2": 2.6068732610851673e-06
 }

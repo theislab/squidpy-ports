@@ -1,5 +1,5 @@
 {
-  "host": "supergpu26.scidom.de",
+  "host": "supergpu17.scidom.de",
   "note": "The notebook's second fit uses the stale `A, v, xv = LDDMM(...)` tuple API, which upstream no longer returns. The replay supplies a result that unpacks both ways, so both of its fits are compared.",
   "notebook": "merfish-merfish-alignment-using-L-T.ipynb",
   "packages": {
@@ -10,10 +10,10 @@
     "torch": "2.13.0"
   },
   "python": "3.13.14",
-  "slurm_job_id": "39588349",
-  "squidpy_commit": "9735ba3c8198ba279f3f688df92ba5a6876e28c4",
-  "squidpy_seconds": 16.922847152978648,
+  "slurm_job_id": "39747922",
+  "squidpy_commit": "2bff194fc5fa9ff3fe41816af14f745609c8bada",
+  "squidpy_seconds": 23.026225325011183,
   "status": "compared",
-  "upstream_seconds": 800.3547663729987,
+  "upstream_seconds": 920.4974229750223,
   "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }
