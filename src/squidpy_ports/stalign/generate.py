@@ -461,6 +461,59 @@ def _centred_axes(shape: tuple[int, int]) -> list[np.ndarray]:
     return [(np.arange(n, dtype=float) - (n - 1) / 2.0) for n in shape]
 
 
+#: Step of the target axes in the mixed-unit fixture, against the source's step of 1.
+#: 30 is not arbitrary: `xenium-heimage-alignment` pairs an H&E at 1 unit per pixel with a
+#: Xenium density rasterised at `dx=30`, and that pairing is what this fixture is for.
+MIXED_TARGET_STEP = 30.0
+
+
+def _write_image_mixed_units(st, clouds: F.Clouds, out: Path) -> None:
+    """Upstream run on a source and target whose axes are in *different* units.
+
+    Every other image fixture places both sides on centred pixel axes, so each carries one
+    unit and any confusion between them is invisible. Real pairs do not: an H&E in pixels
+    against a density rasterised in microns is the ordinary case, and it is the case
+    `xenium-heimage-alignment` is. Nothing measured the velocity grid there until
+    `align_stalign_image` began reading each element's real placement, at which point the
+    grid moved by two orders of magnitude -- see ledger row D12.
+
+    `a` is deliberately *not* rescaled. Upstream builds the velocity grid from the source's
+    axes, which stay in pixels, so the notebook's own shape is a kernel width tuned for the
+    source's units against a target measured in something else -- `a=500` against a 2050px
+    H&E, paired with a density in microns. Scaling `a` by the target step instead collapses
+    the source's span to a single velocity sample and upstream raises.
+    """
+    (_, _, query), (_, _, ref) = _rasters(st, clouds)
+    x_source = _centred_axes(query.shape[1:])
+    # The target lives in a coarser unit, spanning a correspondingly larger physical domain.
+    x_target = [axis * MIXED_TARGET_STEP for axis in _centred_axes(ref.shape[1:])]
+
+    lin, trans = _image_start()
+    params = dict(IMAGE_PARAMS)
+    kwargs = dict(xI=x_source, I=query, xJ=x_target, J=ref, L=lin, T=trans, **params)
+    run = st.LDDMM(niter=IMAGE_ITERS, **kwargs)
+    nxt = st.LDDMM(niter=IMAGE_ITERS + 1, **kwargs)
+
+    np.savez_compressed(
+        out / "image_mixed_units.npz",
+        __provenance__=_provenance(section="image_mixed_units", niter=IMAGE_ITERS),
+        start_L=lin,
+        start_T=trans,
+        source_axis_0=x_source[0],
+        source_axis_1=x_source[1],
+        target_axis_0=x_target[0],
+        target_axis_1=x_target[1],
+        query=query,
+        ref=ref,
+        a=np.asarray(params["a"]),
+        A=nxt["A"].numpy(),
+        v=run["v"].numpy(),
+        WM=run["WM"].numpy(),
+        xv_0=run["xv"][0].numpy(),
+        xv_1=run["xv"][1].numpy(),
+    )
+
+
 def _write_image_trajectory_matched(st, clouds: F.Clouds, out: Path) -> None:
     """The same comparison with both images cropped to a common extent.
 

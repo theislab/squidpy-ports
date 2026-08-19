@@ -84,6 +84,7 @@ def bundle(tmp_path_factory) -> Path:
         G._write_trajectory,
         G._write_image_trajectory,
         G._write_image_trajectory_matched,
+        G._write_image_mixed_units,
         G._write_slice,
     ):
         write(st, clouds, out)
@@ -783,6 +784,61 @@ _IMAGE_ITERS = 12
 @pytest.fixture(scope="session")
 def image_reference(bundle):
     return _load(bundle, "image_trajectory")
+
+
+@pytest.fixture(scope="session")
+def image_mixed_units(bundle):
+    """Source in one unit, target in another -- see :func:`generate._write_image_mixed_units`."""
+    return _load(bundle, "image_mixed_units")
+
+
+def _fit_mixed_units(fixture, niter):
+    """The image path on the mixed-unit axes, from the fixture's own ``a``.
+
+    No landmarks and no starting affine: the velocity grid is built from the axes, ``a`` and
+    ``expand`` alone, so neither can change what this measures, and leaving them out keeps
+    the comparison to the one quantity under test.
+    """
+    params = {**_IMAGE_PARAMS, "a": float(fixture["a"])}
+    return fit_stalign_image(
+        fixture["ref"],
+        fixture["query"],
+        ref_axes=(fixture["target_axis_0"], fixture["target_axis_1"]),
+        query_axes=(fixture["source_axis_0"], fixture["source_axis_1"]),
+        niter=niter,
+        **params,
+    )
+
+
+def test_mixed_unit_velocity_grid_matches_upstream(image_mixed_units, record_property):
+    """The velocity grid upstream builds when the two sides disagree about units.
+
+    The grid is the deformation's entire degrees of freedom, so a difference here is not a
+    tolerance question: on `xenium-heimage-alignment` the port builds 48x66 where upstream
+    builds 17x23, and that fit bends the section into a dome (ledger row D12).
+
+    This passes, and that is the useful part: mixed units *alone* do not reproduce D12, so
+    the trigger is something more specific about that notebook's inputs. Kept as the control
+    that rules the general case out -- see D12 for what remains open.
+    """
+    fit = _fit_mixed_units(image_mixed_units, _IMAGE_ITERS)
+    got = tuple(int(np.asarray(axis).size) for axis in fit.velocity_grid)
+    expected = (int(image_mixed_units["xv_0"].size), int(image_mixed_units["xv_1"].size))
+    record_property("velocity_grid_squidpy", got)
+    record_property("velocity_grid_upstream", expected)
+    assert got == expected, f"velocity grid {got} against upstream's {expected}"
+
+
+def test_mixed_unit_axes_are_actually_mixed(image_mixed_units):
+    """The fixture is only meaningful while the two sides really carry different units.
+
+    A single normalisation of the generator would silently turn this into a duplicate of
+    `image_trajectory` -- passing, and testing nothing.
+    """
+    source_step = float(image_mixed_units["source_axis_0"][1] - image_mixed_units["source_axis_0"][0])
+    target_step = float(image_mixed_units["target_axis_0"][1] - image_mixed_units["target_axis_0"][0])
+    assert source_step == pytest.approx(1.0)
+    assert target_step == pytest.approx(G.MIXED_TARGET_STEP)
 
 
 def test_image_path_axes_match_the_reference(image_reference):

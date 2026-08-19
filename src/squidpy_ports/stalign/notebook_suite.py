@@ -981,6 +981,39 @@ def _torch_fit(result: dict[str, Any]) -> _FitResult:
     )
 
 
+def _capture_fit_arguments(notebook: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+    """Dump one notebook's real fit arguments when ``STALIGN_CAPTURE_DIR`` is set.
+
+    A divergence that appears only on a notebook's own inputs cannot be chased from the
+    synthetic fixtures. Three attempts at rebuilding `xenium-heimage`'s regime by hand each
+    diverged for reasons of their own -- mis-scaled sigmas against a density raster, then an
+    effectively unregularised fit -- and agreed at every commit, which measures the
+    reconstruction rather than the port. The replay already holds the true arguments at the
+    substitution site, so capturing them costs one run and ends the guessing.
+
+    Raw ``kwargs``, deliberately before :func:`_capped`, so a fast ``STALIGN_SMOKE_NITER=1``
+    capture still records the notebook's real ``niter``. ``None`` is dropped rather than
+    stored: ``np.savez`` would need pickling for it, and an absent key reads back as ``None``.
+    """
+    directory = os.environ.get("STALIGN_CAPTURE_DIR")
+    if not directory:
+        return
+    out = Path(directory)
+    out.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {}
+    for index, value in enumerate(args):
+        if isinstance(value, (list, tuple)):  # the axis pairs, `xI` and `xJ`
+            for axis, item in enumerate(value):
+                payload[f"arg{index}_{axis}"] = _numpy(item)
+        else:
+            payload[f"arg{index}"] = _numpy(value)
+    for key, value in kwargs.items():
+        if value is None or key == "device":
+            continue
+        payload[f"kw_{key}"] = _numpy(value) if hasattr(value, "shape") else np.asarray(value)
+    np.savez_compressed(out / f"{Path(notebook).stem}-fit-args.npz", **payload)
+
+
 def _compare_lddmm(notebook: str) -> ComparisonResult:
     """Run the notebook twice -- upstream's fit, then Squidpy's -- and pair up its figures.
 
@@ -995,6 +1028,7 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
     torch.set_default_dtype(torch.float64)
 
     def upstream_fit(args: tuple[Any, ...], kwargs: dict[str, Any], original: Any) -> Any:
+        _capture_fit_arguments(notebook, args, kwargs)
         call = _capped(kwargs)
         call["device"] = device
         for key in ("muA", "muB"):
