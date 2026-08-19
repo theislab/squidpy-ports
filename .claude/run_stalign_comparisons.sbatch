@@ -85,6 +85,13 @@ export TMPDIR="$CACHE_ROOT/tmp/$TASK_TAG"
 export STALIGN_COMPARISON_OUTPUT="$LOCAL_OUTPUT"
 export JAX_ENABLE_X64=1
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
+# Determinism, the half that has to precede library load -- see
+# `notebook_suite._pin_fit_determinism` for the in-process half and for why rank 3
+# needs this at all (rank 2 already reproduces to ~1e-12; rank 3 moved cells up to
+# 109um and reassigned 15-22% of Allen regions between two runs of the *same* code).
+# cuBLAS needs a fixed workspace or its reductions may reorder; XLA needs telling.
+export CUBLAS_WORKSPACE_CONFIG=:4096:8
+export XLA_FLAGS="${XLA_FLAGS:+$XLA_FLAGS }--xla_gpu_deterministic_ops=true"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export SETUPTOOLS_SCM_PRETEND_VERSION=1.8.3.dev0
 export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SQUIDPY=1.8.3.dev0

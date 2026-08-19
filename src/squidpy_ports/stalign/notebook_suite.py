@@ -1004,6 +1004,29 @@ def _torch_fit(result: dict[str, Any]) -> _FitResult:
     )
 
 
+def _pin_fit_determinism() -> None:
+    """Ask both backends for deterministic kernels before either fit runs.
+
+    Rank 2 reproduces to ~1e-12 across runs, so this was never needed there. Rank 3 does not:
+    rerunning the two ``allen3Datlas`` notebooks with identical code moved cells by up to
+    **109 um** and reassigned **15-22 %** of Allen regions *on the upstream side alone* --
+    measured between jobs 39746531 and 39747874, same pinned upstream, one of them on the same
+    host. A 50 um annotation volume cannot be read reproducibly through a fit that wanders one
+    to two voxels, which makes every rank-3 number indicative rather than measured.
+
+    ``warn_only=True`` on purpose. Raising would abort the sweep on the first op lacking a
+    deterministic kernel and tell us nothing; warning names the op in the job log while still
+    taking the deterministic path everywhere one exists. The environment half --
+    ``CUBLAS_WORKSPACE_CONFIG`` for cuBLAS and ``--xla_gpu_deterministic_ops`` for XLA -- has
+    to be set before the libraries load, so it lives in the launcher rather than here.
+    """
+    import torch
+
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    torch.backends.cudnn.benchmark = False  # no autotuning, so the algorithm cannot vary
+    torch.manual_seed(0)
+
+
 def _capture_fit_arguments(notebook: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
     """Dump one notebook's real fit arguments when ``STALIGN_CAPTURE_DIR`` is set.
 
@@ -1049,6 +1072,7 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
 
     device = _fit_device()
     torch.set_default_dtype(torch.float64)
+    _pin_fit_determinism()
 
     def upstream_fit(args: tuple[Any, ...], kwargs: dict[str, Any], original: Any) -> Any:
         _capture_fit_arguments(notebook, args, kwargs)
@@ -1343,6 +1367,7 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
 
     device = _fit_device()
     torch.set_default_dtype(torch.float64)
+    _pin_fit_determinism()
     _REGION_COLOURS.clear()  # per notebook, so one notebook's regions cannot colour another's
     _patch_atlas_downloads(upstream.load())
     _patch_region_colours(upstream.load())
