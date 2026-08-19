@@ -620,7 +620,7 @@ def _slice_start() -> tuple[np.ndarray, np.ndarray]:
     """The initial affine, in the ``(z, y, x)`` array order both sides work in.
 
     An in-plane rotation about the out-of-plane axis, then a uniform scale -- the same
-    construction ``fit_stalign_slice``'s ``initial_rotation`` / ``initial_scale`` build,
+    construction ``fit_stalign_volume``'s ``initial_rotation`` / ``initial_scale`` build,
     and the notebook's cell [30] with ``scale_x == scale_y == scale_z``.
     """
     cos, sin = np.cos(SLICE_THETA), np.sin(SLICE_THETA)

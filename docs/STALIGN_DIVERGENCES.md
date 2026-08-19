@@ -16,9 +16,9 @@ Each row has an id. Every `xfail(strict=True)` in the test module cites its row 
 cannot silently rot.
 
 Comparisons go through the public API wherever one exists: point transforms via
-`StalignResult.transform`, the image warp via `StalignResult.warp_image`, the landmark
+`Stalign2DResult.transform`, the image warp via `Stalign2DResult.warp_image`, the landmark
 initialisation via `align_stalign_obs(..., niter=0)`, and at rank 3 the reference sampling
-via `StalignSliceResult.sample_reference`. What stays white-box is what has no
+via `Stalign3DResult.sample_reference`. What stays white-box is what has no
 public route — the objective and its gradients are not observable from outside, and the
 regulariser and grids are preconditions rather than results.
 

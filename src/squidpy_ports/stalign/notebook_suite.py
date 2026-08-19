@@ -13,7 +13,7 @@ import re
 import tempfile
 import time
 import traceback
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
@@ -447,8 +447,8 @@ def _relative_l2(actual: np.ndarray, expected: np.ndarray) -> float:
 _INPUT_NAMES = frozenset({"I", "J", "XI", "XJ", "YI", "YJ", "xI", "xJ", "yI", "yJ", "Ifoo", "Jfoo"})
 
 
-def _label_metrics(name: str, expected: Any, actual: Any) -> dict[str, float]:
-    """Disagreement on the categorical columns a notebook carries beside its arrays.
+def _frame_metrics(name: str, expected: Any, actual: Any) -> dict[str, float]:
+    """Per-column scores for the frames a notebook carries beside its arrays.
 
     Relative L2 needs numbers, so the region assignment in the volume-to-section notebooks --
     ``df['acronym']``, looked up per cell from the aligned atlas coordinate -- was plotted by
@@ -456,16 +456,35 @@ def _label_metrics(name: str, expected: Any, actual: Any) -> dict[str, float]:
     (see ``docs/STALIGN_DIVERGENCES.md`` row D11), and without this a reader cannot tell six
     reassigned boundary cells from six hundred.
 
-    Reported as the fraction of rows whose label differs. Rows null on *both* sides count as
-    agreeing: a cell outside the atlas has no region, and ``!=`` would otherwise score every
-    one of them as a disagreement.
+    Two kinds of column, two kinds of score:
+
+    *Text* columns get the fraction of rows whose label differs. Rows null on *both* sides
+    count as agreeing: a cell outside the atlas has no region, and ``!=`` would otherwise
+    score every one of them as a disagreement.
+
+    *Float* columns get the median absolute difference, in the column's own units -- microns,
+    for the atlas coordinates. That is what turns the label fraction from a number into an
+    explanation: the acronym is a nearest-voxel lookup into the 50 micron annotation volume
+    (``analyze3Dalign`` warps it with ``mode='nearest'`` and rounds the query points), so a
+    label fraction alone cannot say whether the cells moved by a fifth of a voxel or by ten.
+    A relative L2 cannot say either, being scale-free. Columns the two passes share as inputs
+    land at exactly 0.0 here, which is the control: it shows the difference is the fit and not
+    the harness.
+
+    Integer columns are skipped. In these notebooks they are ids -- ``df['struct_id']`` is the
+    acronym in numeric clothing -- so a distance would be meaningless and a disagreement would
+    duplicate the text column beside it.
     """
     metrics: dict[str, float] = {}
     if list(expected.columns) != list(actual.columns) or len(expected) != len(actual):
         return metrics
     for column in expected.columns:
         left, right = expected[column], actual[column]
-        if left.dtype.kind in "fiu" or len(left) < 4:
+        if len(left) < 4 or left.dtype.kind in "iu":
+            continue
+        if left.dtype.kind == "f":
+            delta = np.abs(left.to_numpy() - right.to_numpy())
+            metrics[f"{name}[{column}] median abs delta"] = float(np.nanmedian(delta))
             continue
         differs = left.to_numpy() != right.to_numpy()
         both_null = left.isna().to_numpy() & right.isna().to_numpy()
@@ -489,7 +508,7 @@ def _namespace_metrics(upstream_ns: dict[str, Any], squidpy_ns: dict[str, Any]) 
         # and this adds the columns relative L2 cannot see.
         if hasattr(upstream_value, "columns") and hasattr(squidpy_ns[name], "columns"):
             try:
-                metrics.update(_label_metrics(name, upstream_value, squidpy_ns[name]))
+                metrics.update(_frame_metrics(name, upstream_value, squidpy_ns[name]))
             except Exception:  # noqa: BLE001 - a frame this harness did not build may hold anything
                 pass
         try:
@@ -530,15 +549,13 @@ def _cast_like(value: Any, default: Any, *, name: str) -> Any:
     return _numpy(value)
 
 
-#: Names and default *values* of squidpy's ``lddmm``, mirrored here because the port
-#: deliberately declares **no** defaults of its own -- they live in
-#: ``squidpy.experimental.tl._align._stalign._SOLVER_DEFAULTS`` so they exist in one place,
-#: and the ``fit_stalign_*`` wrappers resolve them before calling in. The conversion casts
-#: each captured upstream argument to the type the port expects, so it needs those types
-#: from somewhere; mirroring them also keeps the conversion testable in an environment
-#: without squidpy and JAX, neither of which is a dependency here.
-#: ``test_port_signature_matches_the_mirror`` fails wherever squidpy *is* installed if the
-#: names drift from the real signature or the values drift from ``_SOLVER_DEFAULTS``.
+#: The port's keyword names, with one value each carrying the *type* a captured upstream
+#: argument has to be cast to. Nothing reads these values as defaults any more -- the
+#: ``align_stalign_*`` entry points resolve the port's own -- so they exist only to say
+#: whether a keyword is an ``int``, a ``float`` or an array. Mirrored here rather than read
+#: from squidpy so the conversion stays testable without squidpy and JAX installed, neither
+#: of which is a dependency of this repo. ``test_port_signature_matches_the_mirror`` fails
+#: wherever squidpy *is* installed if squidpy declares a solver keyword this omits.
 PORT_DEFAULTS: dict[str, Any] = {
     "xI": inspect.Parameter.empty,
     "I": inspect.Parameter.empty,
@@ -605,41 +622,218 @@ def _convert_kwargs(kwargs: dict[str, Any], parameters: Mapping[str, inspect.Par
     return converted
 
 
-def jax_parameters() -> Mapping[str, inspect.Parameter]:
-    """The port's real ``lddmm`` signature, resolved at call time so imports stay optional."""
-    from squidpy.experimental.tl._align._stalign_impl._core import lddmm
+#: Axis reconstruction residual, in the axes' own units, per notebook run. Filled by
+#: :func:`axis_placement` and reported beside the comparison metrics: the public
+#: ``align_stalign_*`` API takes an element's placement rather than its axes, so the
+#: harness has to hand it a ``Scale``/``Translation`` and squidpy rebuilds the axes from
+#: that. Where the rebuild is not bit-exact, the two passes no longer see byte-identical
+#: inputs, and that has to be a measured number rather than a silent one.
+_AXIS_RESIDUAL: dict[str, float] = {}
 
-    return inspect.signature(lddmm).parameters
+
+def axis_placement(axis: np.ndarray) -> tuple[float, float]:
+    """The ``(step, shift)`` whose ``arange(n) * step + shift`` best reproduces ``axis``.
+
+    squidpy's ``_element_axes`` rebuilds an image's physical axes as
+    ``np.arange(size) * step + shift`` from the scale and translation the element carries.
+    Upstream builds its own the same way -- ``np.arange(n) * dx - (n - 1) * dx / 2`` -- so
+    passing the original ``dx`` and offset would reproduce it bit-for-bit. The replay never
+    sees them: it intercepts a ``LDDMM`` call that is already holding axis *arrays*, and
+    ``arange(n) * dx + offset`` has by then absorbed rounding into the values it stores.
+    Recovering the step by differencing is exact only when the offset is small next to the
+    step -- ``arange(17) * 0.65 - 1234.5`` gives ``x[1] - x[0] == 0.650000000000091``.
+
+    So try the constructions upstream actually uses and take the first that is exact; where
+    none is, take the one with the smallest maximum error and record it in
+    :data:`_AXIS_RESIDUAL`. Measured over the notebooks' axis shapes this is exact in the
+    large majority of cases and ~1e-14 in the rest -- small, but the comparison asserts
+    agreement at ~1e-15, so it is reported rather than absorbed.
+    """
+    n = axis.size
+    if n < 2:
+        return 1.0, float(axis[0]) if n else 0.0
+    span = float(axis[-1] - axis[0])
+    candidates = (
+        (span / (n - 1), float(axis[0])),  # whole-span slope: best conditioned
+        (float(axis[1] - axis[0]), float(axis[0])),  # adjacent difference
+        (-2.0 * float(axis[0]) / (n - 1), float(axis[0])),  # upstream's centred grid
+        (float(np.median(np.diff(axis))), float(axis[0])),  # robust to one bad sample
+    )
+    best: tuple[float, tuple[float, float]] | None = None
+    for step, shift in candidates:
+        error = float(np.max(np.abs(np.arange(n, dtype=float) * step + shift - axis)))
+        if error == 0.0:
+            return step, shift
+        if best is None or error < best[0]:
+            best = (error, (step, shift))
+    assert best is not None
+    _AXIS_RESIDUAL["max"] = max(_AXIS_RESIDUAL.get("max", 0.0), best[0])
+    return best[1]
 
 
-def jax_defaults() -> Mapping[str, Any]:
-    """The port's real tuning defaults, which live outside its signature."""
+#: The image key both sides of a pair are parsed under. One name, so `image_key` is a
+#: plain string rather than a `(ref, query)` tuple.
+_IMAGE_KEY = "replay"
+
+
+def as_sdata(array: np.ndarray, axes: Sequence[np.ndarray]) -> Any:
+    """Wrap a channels-first array and its axes as a one-image ``SpatialData``.
+
+    The public ``align_stalign_*`` entry points read an element's physical axes off the
+    scale and translation it carries into a coordinate system, so the axes upstream passed
+    are expressed as exactly that -- see :func:`axis_placement` for the part of this that
+    cannot be made exact.
+    """
+    from spatialdata import SpatialData
+    from spatialdata.models import Image2DModel, Image3DModel
+    from spatialdata.transformations import Scale, Translation
+    from spatialdata.transformations import Sequence as TransformSequence
+
+    spatial = ("z", "y", "x")[-len(axes) :]
+    placement = [axis_placement(np.asarray(axis, dtype=float)) for axis in axes]
+    model = Image3DModel if len(axes) == 3 else Image2DModel
+    element = model.parse(
+        array,
+        dims=("c", *spatial),
+        transformations={
+            "global": TransformSequence(
+                [
+                    Scale([step for step, _ in placement], axes=spatial),
+                    Translation([shift for _, shift in placement], axes=spatial),
+                ]
+            )
+        },
+    )
+    return SpatialData(images={_IMAGE_KEY: element})
+
+
+def _channels_first(image: Any, *, ndim: int) -> np.ndarray:
+    """Upstream's image as squidpy reads it: channels first, one channel if it has none."""
+    array = np.asarray(_numpy(image), dtype=float)
+    return array if array.ndim == ndim + 1 else array[None]
+
+
+def solver_keys() -> frozenset[str]:
+    """Every tuning keyword the public API declares, read off its public TypedDicts.
+
+    These are what the ``align_stalign_*`` entry points accept, so they are what a captured
+    upstream keyword may be forwarded as. Read from squidpy rather than listed here, and
+    from its *public* surface rather than from ``lddmm``'s signature: the TypedDicts are
+    exported, so unlike the kernel they carry a stability contract.
+    """
+    from squidpy.experimental.tl import (
+        StalignImageSolverKwargs,
+        StalignObsSolverKwargs,
+        StalignVolumeSolverKwargs,
+    )
+
+    keys: set[str] = set()
+    for declaration in (StalignImageSolverKwargs, StalignObsSolverKwargs, StalignVolumeSolverKwargs):
+        keys |= set(declaration.__required_keys__) | set(declaration.__optional_keys__)
+    return frozenset(keys)
+
+
+def upstream_solver_defaults() -> Mapping[str, Any]:
+    """The kernel's defaults, which are upstream's ``LDDMM`` defaults.
+
+    Private by necessity, and load-bearing: ``align_stalign_image`` resolves
+    ``_IMAGE_DEFAULTS`` instead -- squidpy's own choices for images, deliberately *not*
+    upstream's (``a`` 20 against 500, ``niter`` 200 against 5000, ``diffeo_start`` 100
+    against 0, ``epV`` 1.0 against 2e3). Fourteen of the seventeen notebooks pass none of
+    those four, so letting the entry point fill them would run the port on a different fit
+    from upstream and publish the gap as a port divergence.
+
+    ``test_solver_defaults_match_upstream`` pins that these really are upstream's, so the
+    two passes start from identical parameters wherever a notebook is silent.
+    """
     from squidpy.experimental.tl._align._stalign import _SOLVER_DEFAULTS
 
     return _SOLVER_DEFAULTS
 
 
-def _jax_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """The notebook's ``LDDMM`` keywords, as a complete call to the port's ``lddmm``.
+def _completed_kwargs(converted: dict[str, Any], accepted: frozenset[str]) -> dict[str, Any]:
+    """``converted``, plus upstream's default for every solver keyword it omits.
 
-    Defaults have to be filled in: ``lddmm`` is a bare kernel that deliberately declares
-    none -- they live in ``_SOLVER_DEFAULTS`` and the ``fit_stalign_*`` wrappers resolve them
-    -- but this comparison calls the kernel directly, so every keyword the notebook omitted
-    has to be supplied or the call raises.
-
-    They come from :func:`jax_defaults`, i.e. from squidpy itself, never from
-    `PORT_DEFAULTS`. The mirror exists so the *conversion* can find a default's type without
-    importing squidpy; the numbers that actually reach the solver have to be the port's own,
-    or this harness would be comparing upstream against its own copy of squidpy's tuning
-    rather than against squidpy. ``L``/``T`` are not in there -- they are the affine, which
-    always comes from the notebook via :func:`_convert_kwargs`.
-
-    Upstream fills the same omissions from its own signature, and
-    `test_solver_defaults_match_upstream_lddmm` pins that those values agree, so a notebook
-    that passes nothing still puts identical parameters on both sides.
+    Every keyword goes on the call explicitly, so the entry point's own defaults never apply.
+    That is the whole point: see :func:`upstream_solver_defaults`.
     """
-    converted = _convert_kwargs(kwargs, PORT_PARAMETERS)
-    return {**{name: value for name, value in jax_defaults().items() if name not in converted}, **converted}
+    filled = {name: value for name, value in upstream_solver_defaults().items() if name in accepted}
+    filled.update({key: value for key, value in converted.items() if key in accepted})
+    return filled
+
+
+def _result_dict(fit: Any) -> dict[str, Any]:
+    """A ``Stalign2DResult``/``Stalign3DResult`` under upstream's own ``LDDMM`` key names.
+
+    The notebook's remaining cells read ``A``, ``v``, ``xv`` and the mixture weights off
+    whatever the fit returned, so the port's result is renamed to those rather than the
+    cells being rewritten. ``affine`` is already in the solver's array order, which is the
+    order upstream's ``A`` is in -- ``affine_xyz`` would silently transpose the meaning.
+    """
+    return {
+        "A": fit.affine,
+        "v": fit.velocity,
+        "xv": fit.velocity_grid,
+        "WM": fit.match_weights,
+        "WA": fit.artifact_weights,
+        "WB": fit.background_weights,
+    }
+
+
+def landmark_affine(source: np.ndarray, target: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    r"""The landmark affine taking ``source`` onto ``target``, through the public API.
+
+    ``align_landmarks`` is the public route, and it takes containers rather than arrays, so
+    the two point sets are wrapped as one-column ``AnnData``\\ s with the landmarks in
+    ``obsm``. Points are stored verbatim, so unlike an image's axes nothing is reconstructed
+    and nothing is lost.
+
+    Two details decide whether this measures what ledger row D7 says it does:
+
+    *Direction.* ``align_landmarks`` solves ``estimate_transform("affine", src=query,
+    dst=ref)``, so its matrix maps *query* onto *ref*. To get ``source -> target`` the
+    ``source`` points go in as the query and ``target`` as the reference. Passing them the
+    other way round would return the inverse map and quietly halve D7's residual.
+
+    *Degenerate input.* ``align_landmarks`` raises below three pairs, where the estimator the
+    STalign path uses internally falls back to a pure centroid shift. The fallback is kept
+    here, so replacing the estimator does not also change the behaviour under three
+    landmarks -- upstream's ``L_T_from_points`` has no such floor either.
+    """
+    import anndata as ad
+    from squidpy.experimental.tl import align_landmarks
+
+    source = np.asarray(source, dtype=float)
+    target = np.asarray(target, dtype=float)
+    if source.shape != target.shape:
+        raise ValueError(f"Expected matching landmark shapes, found {source.shape} and {target.shape}.")
+    if source.shape[0] < 3:
+        return np.eye(2, dtype=float), np.mean(target, axis=0) - np.mean(source, axis=0)
+
+    key = "landmarks"
+
+    def wrap(points: np.ndarray) -> Any:
+        adata = ad.AnnData(np.empty((points.shape[0], 0), dtype=float))
+        adata.obsm[key] = points
+        return adata
+
+    matrix = np.asarray(align_landmarks(wrap(target), wrap(source), landmark_key=key, fit="affine"), dtype=float)
+    return matrix[:2, :2], matrix[:2, 2]
+
+
+def _initial_affine_row_col(converted: dict[str, Any]) -> np.ndarray:
+    """The notebook's starting affine as one homogeneous matrix, in row-col order.
+
+    ``_convert_kwargs`` splits upstream's ``A`` (or its ``L``/``T`` pair) into a linear part
+    and a translation because the kernel took them separately. The public API takes one
+    ``initial_affine``, so they are recombined here.
+    """
+    linear = np.asarray(converted.pop("L"), dtype=float)
+    translation = np.asarray(converted.pop("T"), dtype=float)
+    affine = np.eye(linear.shape[0] + 1, dtype=float)
+    affine[: linear.shape[0], : linear.shape[1]] = linear
+    affine[: translation.size, -1] = translation
+    return affine
 
 
 def _require_same_cells_ran(notebook: str, upstream_pass: _ReplayPass, squidpy_pass: _ReplayPass) -> str | None:
@@ -706,7 +900,7 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
     difference is attributable to `A`, `v` and `xv` alone.
     """
     import torch
-    from squidpy.experimental.tl._align._stalign_impl._core import lddmm
+    from squidpy.experimental.tl import align_stalign_image
 
     device = _fit_device()
     torch.set_default_dtype(torch.float64)
@@ -726,9 +920,22 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
 
         source_axes = tuple(_numpy(axis) for axis in args[0])
         target_axes = tuple(_numpy(axis) for axis in args[2])
-        fit = lddmm(source_axes, _numpy(args[1]), target_axes, _numpy(args[3]), **_jax_kwargs(kwargs))
-        jax.block_until_ready(fit["A"])
-        return _torch_fit(fit)
+        converted = _convert_kwargs(kwargs, PORT_PARAMETERS)
+        landmarks_ref = converted.pop("points_source", None)
+        landmarks_query = converted.pop("points_target", None)
+        initial_affine = _initial_affine_row_col(converted)
+        accepted = solver_keys()
+        fit = align_stalign_image(
+            as_sdata(_channels_first(args[1], ndim=2), source_axes),
+            as_sdata(_channels_first(args[3], ndim=2), target_axes),
+            image_key=_IMAGE_KEY,
+            landmarks_ref=landmarks_ref,
+            landmarks_query=landmarks_query,
+            initial_affine=initial_affine,
+            **_completed_kwargs(converted, accepted - {"initial_affine"}),
+        )
+        jax.block_until_ready(fit.affine)
+        return _torch_fit(_result_dict(fit))
 
     return _pair_passes(notebook, upstream_fit, squidpy_fit)
 
@@ -976,7 +1183,7 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
     choice, they do not fail on it.
     """
     import torch
-    from squidpy.experimental.tl._align._stalign import fit_stalign_slice
+    from squidpy.experimental.tl import align_stalign_volume
 
     device = _fit_device()
     torch.set_default_dtype(torch.float64)
@@ -1016,13 +1223,12 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
                 values = np.atleast_1d(_numpy(mean)).astype(float)
                 forwarded[key] = np.resize(values, n_channels)
 
-        fit = fit_stalign_slice(
-            _numpy(args[1]),
-            section,
-            ref_axes=reference_axes,
-            query_axes=section_axes,
+        fit = align_stalign_volume(
+            as_sdata(_channels_first(args[1], ndim=3), reference_axes),
+            as_sdata(_channels_first(section, ndim=2), section_axes),
+            image_key=_IMAGE_KEY,
             initial_affine=_initial_affine_xyz(kwargs),
-            **forwarded,
+            **{key: value for key, value in forwarded.items() if key in solver_keys()},
         )
         jax.block_until_ready(fit.affine)
         return _torch_slice_fit(fit, section_axes)
@@ -1058,18 +1264,16 @@ def _torch_slice_fit(fit: Any, section_axes: list[np.ndarray]) -> _FitResult:
     since upstream only returns it as a by-product of its final iteration.
     """
     import torch
-    from squidpy.experimental.tl._align._stalign_impl._core import transform_grid_row_col
 
     def tensor(value: Any) -> Any:
         return torch.as_tensor(_numpy(value), dtype=torch.float64, device=torch.device(_fit_device()))
 
-    section_grid = (np.zeros(1), *section_axes)
-    grid = transform_grid_row_col(
-        tuple(np.asarray(axis, dtype=float) for axis in section_grid),
-        fit.velocity_grid,
-        fit.velocity,
-        fit.affine,
+    # `deformation_grid` applies the single-sample z lift itself and rejects a pre-lifted
+    # grid, so the section's own two axes go in. Its docstring pins that this is the same
+    # call on the same fitted state the objective samples through, not a plotting estimate.
+    grid = fit.deformation_grid(
         direction="backward",
+        query_axes=tuple(np.asarray(axis, dtype=float) for axis in section_axes),
     )
     return _FitResult(
         A=tensor(fit.affine),
@@ -1090,7 +1294,6 @@ def _compare_affine(notebook: str) -> ComparisonResult:
     ``L_T_from_points`` returns, so that is the call the two passes swap.
     """
     import matplotlib.pyplot as plt
-    from squidpy.experimental.tl._align._stalign_impl._helpers import affine_from_points
 
     residuals: dict[str, float] = {}
 
@@ -1105,7 +1308,7 @@ def _compare_affine(notebook: str) -> ComparisonResult:
         return linear, translation
 
     def squidpy_fit(args: tuple[Any, ...], kwargs: dict[str, Any], original: Any) -> Any:
-        linear, translation = affine_from_points(_numpy(args[0]), _numpy(args[1]))
+        linear, translation = landmark_affine(_numpy(args[0]), _numpy(args[1]))
         record("squidpy", args, linear, translation)
         return np.asarray(linear), np.asarray(translation)
 

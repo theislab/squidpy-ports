@@ -31,9 +31,8 @@ from squidpy_ports.stalign.notebook_suite import (
     UNREPLAYABLE_NOTEBOOKS,
     _convert_kwargs,
     _initial_affine_xyz,
-    jax_defaults,
-    jax_parameters,
     notebook_for_index,
+    solver_keys,
     write_failure,
 )
 
@@ -149,23 +148,22 @@ def test_port_signature_matches_the_mirror():
     """Where squidpy is installed, `PORT_DEFAULTS` must still describe the real port.
 
     The conversion casts each captured argument to the type the mirror declares, so a
-    renamed parameter or an `int`-turned-`float` would change what the suite sends. squidpy
-    is not a dependency here (it is the thing under comparison), so the mirror stands in --
-    and is checked against the real thing whenever it can be.
+    renamed keyword would change what the suite sends. squidpy is not a dependency here (it
+    is the thing under comparison), so the mirror stands in -- and is checked against the
+    real thing whenever it can be.
 
-    Two halves, because the port splits them: the *names* come from `lddmm`'s signature,
-    while the *values* live in `_SOLVER_DEFAULTS` -- `lddmm` itself declares no defaults, so
-    that they exist in exactly one place.
+    Checked against squidpy's *public* solver TypedDicts, not `lddmm`'s signature: the
+    TypedDicts are exported and so carry a stability contract, and the four renames on
+    2026-08-19 alone are the argument for depending on the surface that has one. The port's
+    default *values* are deliberately not asserted -- nothing here supplies them any more,
+    since the `align_stalign_*` entry points resolve their own.
     """
     pytest.importorskip("jax")
     pytest.importorskip("squidpy")
 
-    real = jax_parameters()
-    assert set(real) == set(PORT_DEFAULTS)
-
-    tuning = jax_defaults()
-    assert set(tuning) <= set(PORT_DEFAULTS), f"unmirrored tuning keys: {sorted(set(tuning) - set(PORT_DEFAULTS))}"
-    assert {name: PORT_DEFAULTS[name] for name in tuning} == dict(tuning)
+    declared = solver_keys()
+    unmirrored = declared - set(PORT_DEFAULTS)
+    assert not unmirrored, f"squidpy declares solver keywords the mirror does not: {sorted(unmirrored)}"
 
 
 @pytest.mark.parametrize("wrap", [lambda v: v, np.asarray, torch.as_tensor], ids=["python", "numpy", "torch"])
@@ -424,6 +422,90 @@ def test_replay_uses_the_notebooks_own_variables_for_metrics():
     assert metrics["tpointsI relative L2"] == 0.0
 
 
+def test_replay_fills_omitted_keywords_from_upstream_not_the_image_path():
+    """A keyword a notebook omits must reach the port as *upstream's* default.
+
+    The public `align_stalign_image` resolves `_IMAGE_DEFAULTS`, which are squidpy's own
+    choices for images and deliberately not upstream's: `a` 20 against 500, `niter` 200
+    against 5000, `diffeo_start` 100 against 0, `epV` 1.0 against 2e3. Fourteen of the
+    seventeen notebooks pass none of those four, so letting the entry point fill them would
+    run the port on a different fit from upstream and publish the gap as a port divergence.
+    Every solver keyword therefore goes on the call explicitly.
+    """
+    pytest.importorskip("squidpy")
+    from squidpy.experimental.tl._align import _stalign
+
+    from squidpy_ports.stalign.notebook_suite import _completed_kwargs, solver_keys
+
+    accepted = solver_keys()
+    # A notebook that passes only `sigmaM`, as most of them effectively do for these knobs.
+    completed = _completed_kwargs({"sigmaM": 3.0}, accepted)
+
+    assert completed["sigmaM"] == 3.0, "an explicitly passed keyword must survive"
+    for knob in ("a", "niter", "diffeo_start", "epV"):
+        assert completed[knob] == _stalign._SOLVER_DEFAULTS[knob], f"{knob} is not upstream's default"
+        if _stalign._IMAGE_DEFAULTS[knob] != _stalign._SOLVER_DEFAULTS[knob]:
+            assert completed[knob] != _stalign._IMAGE_DEFAULTS[knob], (
+                f"{knob} came from the image path's defaults, not upstream's"
+            )
+
+
+def test_axis_placement_reproduces_upstreams_grids():
+    """The placement handed to the public API must rebuild upstream's axes, or say it did not.
+
+    `align_stalign_*` reads an element's axes off its scale and translation, so a silent lossy
+    round-trip would mean the two passes no longer see identical inputs -- a divergence this
+    harness invented. Upstream builds axes both centred (the atlas) and from a corner
+    (`rasterize`), so both forms are covered.
+
+    Most grids rebuild bit-for-bit. A minority cannot: `arange(n) * step + offset` has already
+    absorbed rounding, and no `(step, shift)` recovers it. Those must be *recorded*, and the
+    error must stay far below the ~1e-12 the comparison asserts at.
+    """
+    from squidpy_ports.stalign.notebook_suite import _AXIS_RESIDUAL, axis_placement
+
+    exact = inexact = 0
+    for n in (17, 33, 41, 57, 100, 101, 256, 501):
+        for step in (50.0, 30.0, 25.0, 12.5, 1.0, 0.65):
+            for axis in (
+                np.arange(n) * step - (n - 1) * step / 2.0,  # centred: the atlas grids
+                np.arange(n) * step,  # from the origin
+            ):
+                _AXIS_RESIDUAL.clear()
+                got_step, got_shift = axis_placement(axis)
+                rebuilt = np.arange(n, dtype=float) * got_step + got_shift
+                if np.array_equal(rebuilt, axis):
+                    exact += 1
+                    assert not _AXIS_RESIDUAL, f"exact rebuild still recorded a residual: {_AXIS_RESIDUAL}"
+                else:
+                    inexact += 1
+                    error = float(np.max(np.abs(rebuilt - axis)))
+                    assert _AXIS_RESIDUAL["max"] == pytest.approx(error), "an inexact rebuild went unrecorded"
+                    assert error < 1e-12, f"n={n} step={step}: {error:.3e} is too large to absorb"
+
+    # A regression that stops recovering the step at all would leave this near zero.
+    assert exact / (exact + inexact) > 0.9, f"only {exact}/{exact + inexact} grids rebuild exactly"
+
+
+def test_axis_placement_records_what_it_cannot_reproduce():
+    """Where the step is unrecoverable the residual is reported, not swallowed.
+
+    `arange(n) * step + offset` loses the low bits of `step` once `offset` dominates it, and
+    no `(step, shift)` pair rebuilds the stored values exactly. That is a real limit of the
+    public API's placement contract, so it has to surface as a number.
+    """
+    from squidpy_ports.stalign.notebook_suite import _AXIS_RESIDUAL, axis_placement
+
+    _AXIS_RESIDUAL.clear()
+    axis = np.arange(17) * 0.65 - 1234.5
+    step, shift = axis_placement(axis)
+    rebuilt = np.arange(17, dtype=float) * step + shift
+
+    assert not np.array_equal(rebuilt, axis)  # the premise: this one cannot be exact
+    assert _AXIS_RESIDUAL["max"] == pytest.approx(np.max(np.abs(rebuilt - axis)))
+    assert _AXIS_RESIDUAL["max"] < 1e-12  # small, but reported rather than absorbed
+
+
 def test_replay_scores_categorical_columns_relative_l2_cannot_see():
     """A region assignment is a string, so only a label metric can quantify the two legends.
 
@@ -434,20 +516,38 @@ def test_replay_scores_categorical_columns_relative_l2_cannot_see():
 
     from squidpy_ports.stalign.notebook_suite import _namespace_metrics
 
-    def frame(acronyms):
-        return pd.DataFrame({"coord0": np.arange(4.0), "acronym": acronyms})
+    def frame(acronyms, shift=0.0):
+        return pd.DataFrame(
+            {
+                "coord0": np.arange(4.0) + shift,  # the warped atlas coordinate, microns
+                "x": np.arange(4.0),  # a shared input: identical on both sides
+                "struct_id": np.arange(4),  # the acronym as an id, not a distance
+                "acronym": acronyms,
+            }
+        )
 
     upstream_ns = {"df": frame(["VISp4", "VISp5", "CA1", None])}
-    squidpy_ns = {"df": frame(["VISp4", "VISp5", "DG-mo", None])}
+    squidpy_ns = {"df": frame(["VISp4", "VISp5", "DG-mo", None], shift=0.5)}
 
     metrics = _namespace_metrics(upstream_ns, squidpy_ns)
 
     # One of four rows reassigned; the pair that is null on both sides is not a disagreement.
     assert metrics["df[acronym] label disagreement"] == pytest.approx(0.25)
-    # The numeric column keeps its own scoring, and an all-numeric frame is still scored whole.
-    assert "df relative L2" not in metrics  # mixed dtypes: object array, as before
+    # The displacement that explains it, in the column's own units.
+    assert metrics["df[coord0] median abs delta"] == pytest.approx(0.5)
+    # A column both passes share is the control: it has to read exactly zero.
+    assert metrics["df[x] median abs delta"] == 0.0
+    # An id column is neither a distance nor a second copy of the acronym.
+    assert not [key for key in metrics if "struct_id" in key]
+    # A mixed frame is still not scored whole: as an array it is object dtype, as before.
+    assert "df relative L2" not in metrics
+    # An all-numeric frame keeps its whole-frame relative L2 and gains the per-column delta,
+    # which is the absolute-scale companion to a norm that is scale-free by construction.
     numeric = {"df1": pd.DataFrame({"a": np.arange(4.0)})}
-    assert set(_namespace_metrics(numeric, numeric)) == {"df1 relative L2"}
+    assert set(_namespace_metrics(numeric, numeric)) == {
+        "df1 relative L2",
+        "df1[a] median abs delta",
+    }
 
 
 def test_index_maps_array_task_ids_onto_notebooks():
@@ -645,7 +745,7 @@ def test_report_folds_parametrised_cases_and_separates_xfail_from_skip(tmp_path)
 
 
 def test_initial_affine_is_reversed_into_xy_z_order():
-    """Upstream's `A` is `(z, y, x)`; `fit_stalign_slice` takes `(x, y, z)`.
+    """Upstream's `A` is `(z, y, x)`; `fit_stalign_volume` takes `(x, y, z)`.
 
     Reversing the *spatial* axes only is a permutation of the first three rows and columns.
     A plain `[::-1, ::-1]` would move the homogeneous row too and silently produce a
@@ -706,13 +806,13 @@ def test_slice_fit_result_exposes_what_the_3d_notebooks_read():
     pytest.importorskip("jax")
     pytest.importorskip("squidpy")
     import jax.numpy as jnp
-    from squidpy.experimental.tl import StalignSliceResult
+    from squidpy.experimental.tl import Stalign3DResult
 
     from squidpy_ports.stalign.notebook_suite import _torch_slice_fit
 
     section_axes = [np.linspace(-4.0, 4.0, 5), np.linspace(-6.0, 6.0, 7)]
     grid = [np.linspace(-8.0, 8.0, 3)] * 3
-    result = StalignSliceResult(
+    result = Stalign3DResult(
         affine=jnp.eye(4),
         velocity=jnp.zeros((1, 3, 3, 3, 3)),
         velocity_grid=tuple(jnp.asarray(axis) for axis in grid),
@@ -945,13 +1045,13 @@ def test_published_results_are_matched_only_where_upstream_shipped_this_commit_o
 
 @pytest.mark.parametrize(
     ("defaults", "entry"),
-    [("_SOLVER_DEFAULTS", "LDDMM"), ("_SLICE_DEFAULTS", "LDDMM_3D_to_slice")],
+    [("_SOLVER_DEFAULTS", "LDDMM"), ("_VOLUME_DEFAULTS", "LDDMM_3D_to_slice")],
     ids=["rank-2", "rank-3"],
 )
 def test_solver_defaults_match_upstream(defaults, entry):
     """squidpy's own solver defaults are upstream's, so an omitted keyword is not a divergence.
 
-    `_jax_kwargs` and `fit_stalign_slice` fill every keyword a notebook did not pass, because
+    `align_stalign_volume` fills every keyword a notebook did not pass, because
     the port's solver is a bare kernel declaring none. Upstream fills the same omissions from
     its signature. Both ranks are checked: the two allen3d notebooks pass none of the five
     knobs where rank 3 differs from rank 2, so a drift there would reach the published `v` as
@@ -960,6 +1060,8 @@ def test_solver_defaults_match_upstream(defaults, entry):
     import inspect as _inspect
 
     pytest.importorskip("squidpy")
+    # Private by necessity: the port's default *values* have no public accessor, and this
+    # is the check that a notebook passing nothing puts identical numbers on both sides.
     from squidpy.experimental.tl._align import _stalign
 
     from squidpy_ports.stalign import upstream
@@ -976,15 +1078,17 @@ def test_solver_defaults_match_upstream(defaults, entry):
 def test_rank_three_defaults_are_actually_different_from_rank_two():
     """The five knobs where upstream's 3D entry point departs from its 2D one.
 
-    If `_SLICE_DEFAULTS` were ever collapsed into `_SOLVER_DEFAULTS`, the test above would
+    If `_VOLUME_DEFAULTS` were ever collapsed into `_SOLVER_DEFAULTS`, the test above would
     still pass on every shared key while the rank-3 fit silently ran with 2D step sizes.
     """
     pytest.importorskip("squidpy")
+    # Private by necessity: the port's default *values* have no public accessor, and this
+    # is the check that a notebook passing nothing puts identical numbers on both sides.
     from squidpy.experimental.tl._align import _stalign
 
     differing = {
         name
-        for name, value in _stalign._SLICE_DEFAULTS.items()
+        for name, value in _stalign._VOLUME_DEFAULTS.items()
         if name in _stalign._SOLVER_DEFAULTS and _stalign._SOLVER_DEFAULTS[name] != value
     }
     assert differing == {"expand", "epL", "epT", "epV", "sigmaR"}, sorted(differing)
