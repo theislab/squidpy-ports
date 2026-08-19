@@ -18,7 +18,8 @@ cannot silently rot.
 Comparisons go through the public API wherever one exists: point transforms via
 `Stalign2DResult.transform`, the image warp via `Stalign2DResult.warp_image`, the landmark
 initialisation via `align_stalign_obs(..., niter=0)`, and at rank 3 the reference sampling
-via `Stalign3DResult.sample_reference`. What stays white-box is what has no
+via `squidpy.experimental.im.sample_volume`, and the landmark affine via
+`align_landmarks(fit="affine")`. What stays white-box is what has no
 public route — the objective and its gradients are not observable from outside, and the
 regulariser and grids are preconditions rather than results.
 
