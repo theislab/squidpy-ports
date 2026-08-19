@@ -424,6 +424,32 @@ def test_replay_uses_the_notebooks_own_variables_for_metrics():
     assert metrics["tpointsI relative L2"] == 0.0
 
 
+def test_replay_scores_categorical_columns_relative_l2_cannot_see():
+    """A region assignment is a string, so only a label metric can quantify the two legends.
+
+    Mirrors the volume-to-section notebooks: ``df`` holds numeric coordinates beside the
+    ``acronym`` a boundary cell can land either side of.
+    """
+    import pandas as pd
+
+    from squidpy_ports.stalign.notebook_suite import _namespace_metrics
+
+    def frame(acronyms):
+        return pd.DataFrame({"coord0": np.arange(4.0), "acronym": acronyms})
+
+    upstream_ns = {"df": frame(["VISp4", "VISp5", "CA1", None])}
+    squidpy_ns = {"df": frame(["VISp4", "VISp5", "DG-mo", None])}
+
+    metrics = _namespace_metrics(upstream_ns, squidpy_ns)
+
+    # One of four rows reassigned; the pair that is null on both sides is not a disagreement.
+    assert metrics["df[acronym] label disagreement"] == pytest.approx(0.25)
+    # The numeric column keeps its own scoring, and an all-numeric frame is still scored whole.
+    assert "df relative L2" not in metrics  # mixed dtypes: object array, as before
+    numeric = {"df1": pd.DataFrame({"a": np.arange(4.0)})}
+    assert set(_namespace_metrics(numeric, numeric)) == {"df1 relative L2"}
+
+
 def test_index_maps_array_task_ids_onto_notebooks():
     """A Slurm array task knows only its id, so this mapping is what selects the work."""
     assert notebook_for_index(0) == NOTEBOOKS[0]

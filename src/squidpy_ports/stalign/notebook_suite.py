@@ -447,6 +447,32 @@ def _relative_l2(actual: np.ndarray, expected: np.ndarray) -> float:
 _INPUT_NAMES = frozenset({"I", "J", "XI", "XJ", "YI", "YJ", "xI", "xJ", "yI", "yJ", "Ifoo", "Jfoo"})
 
 
+def _label_metrics(name: str, expected: Any, actual: Any) -> dict[str, float]:
+    """Disagreement on the categorical columns a notebook carries beside its arrays.
+
+    Relative L2 needs numbers, so the region assignment in the volume-to-section notebooks --
+    ``df['acronym']``, looked up per cell from the aligned atlas coordinate -- was plotted by
+    ``plot_brain_regions`` and scored nowhere. The two passes' legends visibly disagree there
+    (see ``docs/STALIGN_DIVERGENCES.md`` row D11), and without this a reader cannot tell six
+    reassigned boundary cells from six hundred.
+
+    Reported as the fraction of rows whose label differs. Rows null on *both* sides count as
+    agreeing: a cell outside the atlas has no region, and ``!=`` would otherwise score every
+    one of them as a disagreement.
+    """
+    metrics: dict[str, float] = {}
+    if list(expected.columns) != list(actual.columns) or len(expected) != len(actual):
+        return metrics
+    for column in expected.columns:
+        left, right = expected[column], actual[column]
+        if left.dtype.kind in "fiu" or len(left) < 4:
+            continue
+        differs = left.to_numpy() != right.to_numpy()
+        both_null = left.isna().to_numpy() & right.isna().to_numpy()
+        metrics[f"{name}[{column}] label disagreement"] = float((differs & ~both_null).mean())
+    return metrics
+
+
 def _namespace_metrics(upstream_ns: dict[str, Any], squidpy_ns: dict[str, Any]) -> dict[str, float]:
     """Relative L2 on every array the notebook itself computed, under its own variable name.
 
@@ -459,6 +485,13 @@ def _namespace_metrics(upstream_ns: dict[str, Any], squidpy_ns: dict[str, Any]) 
     for name, upstream_value in sorted(upstream_ns.items()):
         if name.startswith("_") or name in _INPUT_NAMES or name not in squidpy_ns:
             continue
+        # Frames carry both kinds: the numeric path below still scores an all-numeric one whole,
+        # and this adds the columns relative L2 cannot see.
+        if hasattr(upstream_value, "columns") and hasattr(squidpy_ns[name], "columns"):
+            try:
+                metrics.update(_label_metrics(name, upstream_value, squidpy_ns[name]))
+            except Exception:  # noqa: BLE001 - a frame this harness did not build may hold anything
+                pass
         try:
             expected, actual = _numpy(upstream_value), _numpy(squidpy_ns[name])
         except Exception:  # noqa: BLE001 - namespaces hold modules, dataframes, closures
