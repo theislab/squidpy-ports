@@ -9,8 +9,11 @@
 # One iteration per notebook, so the whole suite is minutes rather than the ~45 GPU-minutes a
 # real sweep costs. A task that overruns this is hung, not slow.
 #SBATCH --time=00:40:00
-# All seventeen in one allocation: the point is to check every notebook's parameters before
-# spending a sweep, and seventeen single-iteration fits fit comfortably in one job.
+# One task per *substitution site*, not per notebook: the parameters are wired once in the
+# harness, so a mismatch shows on any notebook that reaches the same interception. Three
+# cover all of them -- `LDDMM` (2D, fourteen notebooks), `LDDMM_3D_to_slice`, and
+# `L_T_from_points`. Submit with `--array=1,2,3`; override to check others.
+#SBATCH --array=1,2,3
 #SBATCH --nice=0
 
 # The parameter gate. It answers one question -- do both sides receive the same solver
@@ -27,7 +30,8 @@ set -euo pipefail
 
 PORTS_SOURCE="${1:-${PORTS_SOURCE:-$SLURM_SUBMIT_DIR}}"
 SQUIDPY_SOURCE="${2:-${SQUIDPY_SOURCE:-$(dirname "$PORTS_SOURCE")/squidpy}}"
-OUTPUT="${3:-$PORTS_SOURCE/cluster-results/smoke-${SLURM_JOB_ID:-manual}}"
+# One directory for the whole gate, not one per array task.
+OUTPUT="${3:-$PORTS_SOURCE/cluster-results/smoke-${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID:-manual}}}"
 
 export STALIGN_SMOKE_NITER="${STALIGN_SMOKE_NITER:-1}"
 echo "### parameter gate: niter=$STALIGN_SMOKE_NITER over every mapped notebook"
