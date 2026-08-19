@@ -450,6 +450,31 @@ def test_replay_fills_omitted_keywords_from_upstream_not_the_image_path():
             )
 
 
+def test_smoke_gate_caps_both_passes_and_keeps_the_velocity_in_play(monkeypatch):
+    """The parameter gate must cap `niter` without quietly comparing affines only.
+
+    `diffeo_start` gates the diffeomorphic half: upstream's own 3D defaults start it at 0, but
+    the image path's start it at 100. Capping `niter` to 1 while leaving `diffeo_start` at 100
+    would run one affine-only step, so the gate would pass on exactly the parameters whose
+    mismatch it exists to catch.
+    """
+    from squidpy_ports.stalign.notebook_suite import _capped, smoke_niter
+
+    monkeypatch.delenv("STALIGN_SMOKE_NITER", raising=False)
+    assert smoke_niter() is None
+    untouched = {"niter": 5000, "diffeo_start": 100}
+    assert _capped(untouched) is untouched, "the gate must be inert when unset"
+
+    monkeypatch.setenv("STALIGN_SMOKE_NITER", "1")
+    assert smoke_niter() == 1
+    capped = _capped({"niter": 5000, "diffeo_start": 100, "a": 500.0})
+    assert capped["niter"] == 1
+    assert capped["diffeo_start"] == 0, "a diffeo_start past the cap would test the affine only"
+    assert capped["a"] == 500.0, "the gate caps iterations, it does not retune"
+    # A diffeo_start already inside the cap is upstream's own and must survive.
+    assert _capped({"niter": 5000, "diffeo_start": 0})["diffeo_start"] == 0
+
+
 def test_axis_placement_reproduces_upstreams_grids():
     """The placement handed to the public API must rebuild upstream's axes, or say it did not.
 
@@ -533,6 +558,11 @@ def test_replay_scores_categorical_columns_relative_l2_cannot_see():
 
     # One of four rows reassigned; the pair that is null on both sides is not a disagreement.
     assert metrics["df[acronym] label disagreement"] == pytest.approx(0.25)
+    # The *set* difference distinguishes boundary jitter from bulk displacement: here CA1
+    # lost its only cell and DG-mo gained one, so one label leaves and one arrives.
+    assert metrics["df[acronym] labels only upstream"] == 1.0  # CA1
+    assert metrics["df[acronym] labels only squidpy"] == 1.0  # DG-mo
+    assert metrics["df[acronym] label set jaccard"] == pytest.approx(2 / 4)  # {VISp4,VISp5} of 4
     # The displacement that explains it, in the column's own units.
     assert metrics["df[coord0] median abs delta"] == pytest.approx(0.5)
     # A column both passes share is the control: it has to read exactly zero.

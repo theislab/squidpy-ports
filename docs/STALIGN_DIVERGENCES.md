@@ -179,6 +179,36 @@ different objective looks like when the initialisation is shared. At rank 2 the 
 coincide, so this has no 2D counterpart and every rank-2 row above still holds to machine
 precision.
 
+### R8. The image path's defaults are not upstream's, on purpose — documented
+
+Not a divergence in the algorithm: a divergence in the *defaults*, and a trap for anything
+that compares the two implementations.
+
+| | upstream `LDDMM` / `_SOLVER_DEFAULTS` | `_IMAGE_DEFAULTS` |
+| --- | --- | --- |
+| `a` (regulariser kernel width) | 500.0 | **20.0** |
+| `niter` | 5000 | **200** |
+| `diffeo_start` | 0 | **100** |
+| `epV` | 2e3 | **1.0** |
+
+squidpy's reasons are good ones, and both are improvements. A kernel width of 500 is in the
+velocity grid's physical units, so it is reasonable for cells measured in microns and exceeds
+the whole picture for an image measured in pixels. And `diffeo_start` halfway through the run
+lets the affine settle before the velocity field switches on, instead of letting it absorb
+what is really a global translation — which is what upstream's `diffeo_start=0` does, and is
+worse-conditioned for it. R5 already records the other half of that policy: upstream's
+`niter=5000` ran blind.
+
+The trap is that `align_stalign_image` resolves these, **fourteen of the seventeen notebooks
+pass none of the four**, and the notebooks are not the image modality anyway — they rasterise
+cells in microns, and squidpy agrees, because `_OBS_DEFAULTS` leaves all four at upstream's
+values. A replay that lets the image entry point fill them runs the port on a different fit
+from upstream and reports the gap as a port defect. So `notebook_suite` puts every solver
+keyword on the call explicitly, from `_SOLVER_DEFAULTS`;
+`test_replay_fills_omitted_keywords_from_upstream_not_the_image_path` pins it, and
+`.claude/smoke_stalign_suite.sbatch` catches it in one iteration rather than after a
+forty-five-minute sweep.
+
 ### R7. `affine_from_points` silently changes the landmark estimator — open
 
 Following on from D7: `estimate_transform("affine")` is not a drop-in for upstream's

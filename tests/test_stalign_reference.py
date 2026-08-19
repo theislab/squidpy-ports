@@ -29,18 +29,25 @@ import pytest
 jax = pytest.importorskip("jax")
 pytest.importorskip("squidpy")
 
+import anndata as ad  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 from squidpy.experimental.im import sample_volume  # noqa: E402
-from squidpy.experimental.tl import Stalign2DResult, Stalign3DResult  # noqa: E402
+from squidpy.experimental.tl import (  # noqa: E402
+    Stalign2DResult,
+    Stalign3DResult,
+    align_stalign_obs,
+)
 
 # The estimators stay private on purpose: this module's job is to pin the *kernel* against
 # upstream at the same axes, and the public `align_stalign_*` entry points take an element's
 # placement rather than its axes -- squidpy rebuilds them from a `Scale`/`Translation`, which
 # is not bit-exact for every grid (see `notebook_suite.axis_placement`). A comparison that
 # asserts agreement at ~1e-15 cannot afford the harness perturbing its own inputs.
+#
+# The obs case is the exception and goes through the public `align_stalign_obs`: it starts
+# from points, which `obsm` stores verbatim, so there is no placement to reconstruct.
 from squidpy.experimental.tl._align._stalign import (  # noqa: E402
     fit_stalign_image,
-    fit_stalign_obs,
     fit_stalign_volume,
 )
 
@@ -646,12 +653,22 @@ def test_affine_from_points_is_equivalent_when_well_conditioned(primitives, reco
     """
     source = np.asarray(primitives["landmarks_query"])[:, ::-1]
     target = np.asarray(primitives["landmarks_ref"])[:, ::-1]
-    # Reached through the array-level estimator: `niter=0` fits nothing, so the returned
-    # affine *is* the landmark initialisation. That also pins the wiring -- that
-    # `landmarks_*` actually reach the solver as its starting affine.
-    fit = fit_stalign_obs(
-        primitives["ref"],
-        primitives["query"],
+
+    def wrap(points):
+        """The points as the public API takes them: an ``obsm`` entry, stored verbatim."""
+        adata = ad.AnnData(np.empty((np.asarray(points).shape[0], 0), dtype=float))
+        adata.obsm["spatial"] = np.asarray(points, dtype=float)
+        return adata
+
+    # Through the *public* obs entry point. This case starts from points, which is the obs
+    # modality, so nothing is reconstructed on the way in: `obsm` holds the coordinates
+    # verbatim and squidpy derives the raster axes from `dx`/`raster_expand` exactly as the
+    # array-level estimator does. `niter=0` fits nothing, so the returned affine *is* the
+    # landmark initialisation -- which also pins the wiring, that `landmarks_*` really do
+    # reach the solver as its starting affine.
+    fit = align_stalign_obs(
+        wrap(primitives["ref"]),
+        wrap(primitives["query"]),
         landmarks_query=primitives["landmarks_query"],
         landmarks_ref=primitives["landmarks_ref"],
         niter=0,

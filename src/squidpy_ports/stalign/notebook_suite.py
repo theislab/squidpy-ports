@@ -489,6 +489,19 @@ def _frame_metrics(name: str, expected: Any, actual: Any) -> dict[str, float]:
         differs = left.to_numpy() != right.to_numpy()
         both_null = left.isna().to_numpy() & right.isna().to_numpy()
         metrics[f"{name}[{column}] label disagreement"] = float((differs & ~both_null).mean())
+
+        # The per-row fraction alone cannot tell boundary jitter from bulk displacement.
+        # Jitter flips cells between *adjacent* regions, so both sides still contain both and
+        # the label *sets* barely move; a region only vanishes when it loses every cell it
+        # had. So report how many labels appear on exactly one side, which is what makes the
+        # two legends visibly different lists rather than the same list reordered.
+        upstream_labels = set(left.dropna().unique())
+        squidpy_labels = set(right.dropna().unique())
+        shared = upstream_labels & squidpy_labels
+        union = upstream_labels | squidpy_labels
+        metrics[f"{name}[{column}] labels only upstream"] = float(len(upstream_labels - squidpy_labels))
+        metrics[f"{name}[{column}] labels only squidpy"] = float(len(squidpy_labels - upstream_labels))
+        metrics[f"{name}[{column}] label set jaccard"] = float(len(shared) / len(union)) if union else 1.0
     return metrics
 
 
@@ -751,6 +764,36 @@ def upstream_solver_defaults() -> Mapping[str, Any]:
     return _SOLVER_DEFAULTS
 
 
+def smoke_niter() -> int | None:
+    """Iteration cap for the parameter gate, from ``STALIGN_SMOKE_NITER``.
+
+    A full sweep costs ~45 minutes of GPU and only reports a divergence once every fit has
+    converged, which is the worst moment to discover that the two sides were handed different
+    parameters. One iteration is enough to catch that: after a single step ``A`` and ``v``
+    still agree to ~1e-10 when the inputs match, and disagree grossly when they do not. The
+    `_IMAGE_DEFAULTS` mix-up -- ``a`` 20 against 500, ``diffeo_start`` 100 against 0 -- would
+    have shown on the first step of the first notebook.
+
+    Applied to *both* passes, so it changes what is compared, never which side gets what.
+    """
+    capped = os.environ.get("STALIGN_SMOKE_NITER")
+    return int(capped) if capped else None
+
+
+def _capped(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """``kwargs`` with ``niter`` replaced when the smoke gate is on, otherwise unchanged."""
+    niter = smoke_niter()
+    if niter is None:
+        return kwargs
+    capped = dict(kwargs)
+    capped["niter"] = niter
+    # A diffeomorphic start beyond the cap would leave the velocity field untouched, so the
+    # gate would pass while comparing affines only -- exactly the half that was already fine.
+    if int(capped.get("diffeo_start") or 0) >= niter:
+        capped["diffeo_start"] = 0
+    return capped
+
+
 def _completed_kwargs(converted: dict[str, Any], accepted: frozenset[str]) -> dict[str, Any]:
     """``converted``, plus upstream's default for every solver keyword it omits.
 
@@ -906,7 +949,7 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
     torch.set_default_dtype(torch.float64)
 
     def upstream_fit(args: tuple[Any, ...], kwargs: dict[str, Any], original: Any) -> Any:
-        call = dict(kwargs)
+        call = _capped(kwargs)
         call["device"] = device
         for key in ("muA", "muB"):
             if call.get(key) is not None:
@@ -920,7 +963,7 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
 
         source_axes = tuple(_numpy(axis) for axis in args[0])
         target_axes = tuple(_numpy(axis) for axis in args[2])
-        converted = _convert_kwargs(kwargs, PORT_PARAMETERS)
+        converted = _convert_kwargs(_capped(kwargs), PORT_PARAMETERS)
         landmarks_ref = converted.pop("points_source", None)
         landmarks_query = converted.pop("points_target", None)
         initial_affine = _initial_affine_row_col(converted)
@@ -1192,7 +1235,7 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
     _patch_region_colours(upstream.load())
 
     def upstream_fit(args: tuple[Any, ...], kwargs: dict[str, Any], original: Any) -> Any:
-        call = dict(kwargs)
+        call = _capped(kwargs)
         call["device"] = device
         for key in ("muA", "muB"):
             if call.get(key) is not None:
@@ -1208,7 +1251,7 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
         section_axes = [_numpy(axis) for axis in args[2]]
         forwarded = {
             key: _cast_like(value, PORT_DEFAULTS[key], name=key)
-            for key, value in kwargs.items()
+            for key, value in _capped(kwargs).items()
             if key not in _SLICE_DROPPED and key in PORT_DEFAULTS and value is not None
         }
         # The notebooks pass `muA=[3,3,3]` against a single-channel section and rely on
