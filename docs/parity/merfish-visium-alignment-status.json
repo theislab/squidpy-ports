@@ -1,6 +1,6 @@
 {
-    "failures": {},
-    "statuses": {
-        "merfish-visium-alignment.ipynb": "compared"
-    }
+  "failures": {},
+  "statuses": {
+    "merfish-visium-alignment.ipynb": "compared"
+  }
 }

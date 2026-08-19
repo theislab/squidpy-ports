@@ -53,6 +53,22 @@ LOCAL_SQUIDPY="$JOB_ROOT/squidpy"
 LOCAL_OUTPUT="$JOB_ROOT/results"
 UV_ENV="$JOB_ROOT/.venv"
 
+# /localscratch is node-local and keeps whatever previous jobs left on it. Each task removes
+# its own JOB_ROOT on exit now, but a task killed before that cannot, and the debris is what
+# fills the disk: one sweep lost 15 of 17 tasks to `mkdir ... No space left on device` before
+# a single log line was written. Prune what earlier *jobs* left behind, matching on the suite
+# id -- never on TASK_TAG alone, or concurrent tasks of this same array would delete each
+# other's working directories out from under them.
+mkdir -p "$LOCAL_BASE/jobs"
+for stale in "$LOCAL_BASE"/jobs/*; do
+    [[ -d "$stale" ]] || continue
+    case "$(basename "$stale")" in
+        "${SUITE_ID}_"*) continue ;;
+        *) rm -rf "$stale" 2>/dev/null || true ;;
+    esac
+done
+echo "### localscratch: $(df -h /localscratch 2>/dev/null | tail -1 | awk '{print $4" free of "$2}')"
+
 mkdir -p "$JOB_ROOT" "$LOCAL_OUTPUT" "$DURABLE_OUTPUT" "$UV_CACHE"
 mkdir -p "$CACHE_ROOT/xdg" "$CACHE_ROOT/matplotlib"
 mkdir -p "$CACHE_ROOT/jax" "$CACHE_ROOT/torch" "$CACHE_ROOT/tmp/$TASK_TAG"
@@ -77,6 +93,15 @@ export MKL_NUM_THREADS="$SLURM_CPUS_PER_TASK"
 export HOME="$RUN_HOME"
 export USER="$RUN_USER"
 export PATH="$RUN_HOME/.local/bin:$BASE_PATH"
+# The Allen atlas the two volume-to-section notebooks pull (~40 MB of NRRD plus the ontology
+# CSV). Upstream's `download_aba_image_labels` re-fetches unconditionally -- it opens its
+# target `'wb'` with no existence check (STalign.py:1885) -- and every replay pass gets a
+# fresh working directory, so one comparison would download the atlas four times and the pair
+# eight. Kept beside the sources on Lustre rather than under $LOCAL_OUTPUT because it has to
+# outlive the job and be shared by both array tasks; it is a handful of large files, so it
+# costs the metadata server nothing. Unset, the suite keeps upstream's own download behaviour.
+export STALIGN_ATLAS_CACHE="${STALIGN_ATLAS_CACHE:-$(dirname "$PORTS_SOURCE")/atlas-cache}"
+mkdir -p "$STALIGN_ATLAS_CACHE"
 
 gpu_monitor_pid=""
 copy_evidence() {
@@ -86,7 +111,16 @@ copy_evidence() {
         wait "$gpu_monitor_pid" 2>/dev/null || true
     fi
     mkdir -p "$DURABLE_OUTPUT"
-    rsync -a "$LOCAL_OUTPUT/" "$DURABLE_OUTPUT/" 2>/dev/null || true
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a "$LOCAL_OUTPUT/" "$DURABLE_OUTPUT/" 2>/dev/null || true
+    else
+        cp -a "$LOCAL_OUTPUT/." "$DURABLE_OUTPUT/" 2>/dev/null || true
+    fi
+    # Only after the evidence is on Lustre: the per-task venv is several GB and nothing else
+    # removed it, so five runs in one day filled /localscratch and later array tasks died with
+    # "No space left on device" before they could log anything. CACHE_ROOT is deliberately left
+    # alone -- it lives outside JOB_ROOT so the JAX and Torch caches survive between tasks.
+    rm -rf "$JOB_ROOT" 2>/dev/null || true
     echo "### exit_status=$status evidence=$DURABLE_OUTPUT finished=$(date --iso-8601=seconds)"
     return "$status"
 }
@@ -98,6 +132,7 @@ echo "### squidpy_source=$SQUIDPY_SOURCE"
 echo "### job_root=$JOB_ROOT"
 echo "### uv_cache=$UV_CACHE size=$(du -sh "$UV_CACHE" 2>/dev/null | cut -f1)"
 echo "### durable_output=$DURABLE_OUTPUT"
+echo "### tools: rsync=$(command -v rsync || echo -) tar=$(command -v tar || echo -) git=$(command -v git || echo -)"
 
 for source in "$PORTS_SOURCE" "$SQUIDPY_SOURCE"; do
     if [[ ! -d "$source" ]]; then
@@ -119,15 +154,47 @@ else
 fi
 echo "### stalign_sha=$SQUIDPY_PORTS_STALIGN_SHA"
 
+# Same treatment for the squidpy half of the pin. An editable install of a staged working
+# tree records no commit in pip's metadata, so without this every manifest would say
+# `squidpy_commit: null` -- on pages whose claim is that a result is never separated from
+# its code. Resolved here while Git metadata is still on shared storage; the scratch copy
+# deliberately excludes it.
+export SQUIDPY_COMMIT
+if SQUIDPY_COMMIT="$(git -C "$SQUIDPY_SOURCE" rev-parse HEAD 2>/dev/null)"; then
+    :
+elif [[ -f "$SQUIDPY_SOURCE/.squidpy-commit" ]]; then
+    SQUIDPY_COMMIT="$(<"$SQUIDPY_SOURCE/.squidpy-commit")"
+else
+    SQUIDPY_COMMIT=""
+    echo "### warning: squidpy commit unresolved; manifests will record null" >&2
+fi
+echo "### squidpy_commit=${SQUIDPY_COMMIT:-unresolved}"
+
 nvidia-smi
 # Per task: every task of the array copies into one durable directory.
 nvidia-smi dmon -s pucvmet -d 10 > "$LOCAL_OUTPUT/gpu-dmon-$TASK_TAG.log" 2>&1 &
 gpu_monitor_pid=$!
 
-rsync -a --delete --exclude=.git --exclude=.venv --exclude=_build --exclude=cluster-results \
-    "$PORTS_SOURCE/" "$LOCAL_PORTS/"
-rsync -a --delete --exclude=.git --exclude=.venv --exclude=_build \
-    "$SQUIDPY_SOURCE/" "$LOCAL_SQUIDPY/"
+# Not every compute-node image here carries rsync: job 39552781 reached supergpu26, where
+# `rsync` is absent although the login node has it at /usr/bin/rsync. tar is in every image
+# and takes the same excludes, so staging succeeds either way rather than dying at the last
+# step before the real work. Excludes matter for a full checkout; the staged tree already
+# omits them.
+stage_tree() {
+    src="$1"
+    dest="$2"
+    mkdir -p "$dest"
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -a --delete --exclude=.git --exclude=.venv --exclude=_build \
+            --exclude=cluster-results "$src/" "$dest/"
+    else
+        tar -C "$src" --exclude=.git --exclude=.venv --exclude=_build \
+            --exclude=cluster-results -cf - . | tar -C "$dest" -xf -
+    fi
+}
+
+stage_tree "$PORTS_SOURCE" "$LOCAL_PORTS"
+stage_tree "$SQUIDPY_SOURCE" "$LOCAL_SQUIDPY"
 
 cd "$LOCAL_PORTS"
 command -v uv >/dev/null || {

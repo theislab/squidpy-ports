@@ -24,11 +24,19 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 | **Notebook values comparison** | [Every variable in all 17 upstream notebooks][parity]; the per-variable metrics and manifests behind it are in [`docs/parity/`][parity-data]. |
 | **Reproduce any panel on any GPU box** | [`container/README.md`][container] — one pinned container, any GPU box. |
 | **Regenerate the reference bundle** | [Numerical tests][tests-section] — the command, the provenance blob, and the platform caveat that matters before you commit one. |
-| **Numerical tests** | [The test suites][tests-section], layer by layer: [`tests/test_stalign.py`][ports-tests] here guards the generator; the fork's [`test_stalign_reference.py`][ref-tests] and [`test_align.py`][api-tests] assert the port against it. |
+| **Numerical tests** | [The test suites][tests-section], layer by layer: [`tests/test_stalign.py`][ports-tests] guards the generator and the replay harness; [`tests/test_stalign_reference.py`][ref-tests] asserts the port against upstream, at rank 2 and rank 3. |
 
-The panels are corroboration, not the gate. The gate is the `.npz` bundle this repo emits:
-squidpy replays it at every layer — rasterisation, energy, gradients, trajectory, converged
-fit, image warp — and matches upstream to ~1e-15 on the velocity field.
+The panels are corroboration, not the gate. The gate is `tests/test_stalign_reference.py`, which
+compares the port at every layer — rasterisation, energy, gradients, trajectory, converged fit,
+image warp, and the section-into-volume fit. At rank 2 it matches upstream to ~1e-15 on the velocity
+field. At rank 3 it matches the solver on the seeded fixture, but the two implementations descend on
+different objectives once the velocity moves: upstream regularises over two spatial axes while
+smoothing that energy's gradient over three. That divergence is measured, not asserted away — see
+row D11 of [the divergence ledger](docs/STALIGN_DIVERGENCES.md), and the two volume-to-section rows
+on the [notebook values][parity] page for what it costs end to end.
+
+squidpy itself carries no STalign tests: correctness and parity are owned here, so squidpy's CI does
+not exercise that code and this suite is the gate.
 
 ## Licensing
 
@@ -68,23 +76,25 @@ pytest
 One test skips without squidpy and JAX installed — deliberately, since this repo does not depend on
 either. Install both and it runs.
 
-The suites that assert the *port* against upstream live in the squidpy fork, and need its reference
-bundle. No GPU: they are float64 on CPU and land identically on an H100 (50 s) and on a laptop
-(25 s).
+`tests/test_stalign_reference.py` is the layer that asserts the *port*. It needs squidpy and JAX,
+so it skips without them; install squidpy and it runs. Every upstream value it compares against is
+computed **in this process** from the vendored checkout, by the same generator that writes the
+shareable bundle — so no committed binary can go stale, here or in squidpy. No GPU: float64 on CPU,
+about 80 s on a laptop.
 
 ```bash
-git clone https://github.com/selmanozleyen/squidpy .squidpy-fork
-git -C .squidpy-fork checkout 6a63ff8
-uv pip install -e ".[test]" "./.squidpy-fork[jax]" pytest
-cd .squidpy-fork && JAX_ENABLE_X64=1 pytest -m "reference or not reference" \
-    tests/experimental/methods/test_stalign_reference.py \
-    tests/experimental/tl/test_align.py
+uv pip install -e ".[test]" -e /path/to/squidpy"[jax]" pytest
+MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_ENABLE_X64=1 pytest tests/test_stalign_reference.py
 ```
 
-> **`-m "reference or not reference"` is not optional.** The reference suite is marked
-> `pytest.mark.reference` and the fork's `addopts` carry `-m "not reference"`, so a plain `pytest`
-> **silently deselects all 62 of them** — the entire layer that asserts the port against upstream —
-> and still reports a green run.
+> **`JAX_ENABLE_X64=1` is not optional.** Upstream is double throughout; without it the port runs in
+> single precision and every tolerance in the suite is meaningless. The suite skips rather than
+> lying if the flag is absent, and it has to come from the environment — `jax.config.update` is
+> process-global and would flip the float32 tests in squidpy's own suite in the same worker.
+
+The `.npz` bundle is still what a *shareable* reference looks like, and
+`python -m squidpy_ports.stalign.generate --out DIR` writes it. Nothing in this repo's tests reads
+it from disk; it exists for anyone who wants the numbers without a torch install.
 
 ### How the results table is generated
 
@@ -94,8 +104,7 @@ The table on [Numerical tests][tests-section] is not written by hand. Run the su
 ```bash
 python -m squidpy_ports.stalign.test_report \
     --suite "this repo:tests/test_stalign.py:ports.xml" \
-    --suite "reference suite:.squidpy-fork/tests/experimental/methods/test_stalign_reference.py:fork.xml" \
-    --suite "public API:.squidpy-fork/tests/experimental/tl/test_align.py:fork.xml" \
+    --suite "reference suite:tests/test_stalign_reference.py:reference.xml" \
     --output docs/_static/tests/results.md
 ```
 
@@ -113,8 +122,7 @@ If you found a bug, please use the [issue tracker][].
 [tests-section]: https://squidpy-ports.readthedocs.io/en/latest/correctness.html
 [test-reports]: https://github.com/theislab/squidpy-ports/tree/main/docs/_static/tests
 [ports-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_stalign.py
-[ref-tests]: https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/methods/test_stalign_reference.py
-[api-tests]: https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/tl/test_align.py
+[ref-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_stalign_reference.py
 [parity]: https://squidpy-ports.readthedocs.io/en/latest/parity.html
 [parity-data]: https://github.com/theislab/squidpy-ports/tree/main/docs/parity
 [container]: https://github.com/theislab/squidpy-ports/blob/main/container/README.md

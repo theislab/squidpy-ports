@@ -1,18 +1,19 @@
 {
-    "host": "supergpu17.scidom.de",
-    "note": "The two sections overlap only partially. Unmatched cells are expected; the matching-weight panels identify the supported overlap.",
-    "notebook": "xenium-xenium-alignment.ipynb",
-    "packages": {
-        "jax": "0.11.0",
-        "jaxlib": "0.11.0",
-        "squidpy": "1.8.3.dev0",
-        "squidpy-ports": "0.0.1",
-        "torch": "2.13.0"
-    },
-    "python": "3.13.14",
-    "slurm_job_id": "38960447",
-    "squidpy_seconds": 6.502420449629426,
-    "status": "compared",
-    "upstream_seconds": 18.87356422841549,
-    "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
+  "host": "supergpu28.scidom.de",
+  "note": "The two sections overlap only partially. Unmatched cells are expected; the matching-weight panels identify the supported overlap. Both passes skipped 2 cell(s) unrelated to the fit -- cell 50: RuntimeError: indices should be either on cpu or on the same device as the indexed tensor (cpu); cell 51: RuntimeError: indices should be either on cpu or on the same device as the indexed tensor (cpu)",
+  "notebook": "xenium-xenium-alignment.ipynb",
+  "packages": {
+    "jax": "0.11.1",
+    "jaxlib": "0.11.1",
+    "squidpy": "1.8.3.dev0",
+    "squidpy-ports": "0.0.1",
+    "torch": "2.13.0"
+  },
+  "python": "3.13.14",
+  "slurm_job_id": "39587700",
+  "squidpy_commit": "9735ba3c8198ba279f3f688df92ba5a6876e28c4",
+  "squidpy_seconds": 5.102195182989817,
+  "status": "compared",
+  "upstream_seconds": 11.277405318047386,
+  "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }

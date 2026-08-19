@@ -1,1 +1,27 @@
-{}
+{
+  "A relative L2": 0.0213598029058158,
+  "AI relative L2": 0.708905497595337,
+  "Ishow_source relative L2": 0.39338088293116974,
+  "Ishow_target relative L2": 0.0,
+  "It relative L2": 0.0,
+  "Jt relative L2": 0.0,
+  "L relative L2": 0.0,
+  "Li relative L2": 0.0,
+  "W relative L2": 0.0,
+  "XA relative L2": 0.0,
+  "X_ relative L2": 0.0,
+  "Xs relative L2": 0.035951918149383304,
+  "Y_ relative L2": 0.0,
+  "extent relative L2": 0.0,
+  "extentA relative L2": 0.0,
+  "faces relative L2": 0.0,
+  "normals relative L2": 0.0,
+  "scale_atlas relative L2": 0.0,
+  "v relative L2": 1.8996614082870409,
+  "values relative L2": 0.0,
+  "verts relative L2": 0.0,
+  "vol relative L2": 0.0,
+  "x relative L2": 0.03161334843693522,
+  "y relative L2": 0.04592613948136786,
+  "z relative L2": 0.05191769560873141
+}

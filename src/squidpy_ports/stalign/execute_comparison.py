@@ -16,7 +16,7 @@ writing:
 The comparison notebooks call ``plt.show()`` but the inline backend does not take effect
 under a headless execution kernel, so a throwaway first cell is injected to make
 ``plt.show()`` embed every open figure as a PNG -- backend-independent, and the committed
-notebooks stay free of the ``%matplotlib`` magic that would break ``run_comparisons`` exec.
+notebooks stay free of the ``%matplotlib`` magic that would break a plain ``exec``.
 """
 
 from __future__ import annotations
@@ -24,8 +24,10 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-from importlib.metadata import PackageNotFoundError, distribution, version
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+
+from squidpy_ports.stalign import upstream
 
 # Prepended before execution; dropped from the saved notebook afterwards.
 _CAPTURE_SOURCE = (
@@ -58,21 +60,6 @@ def _package_version(name: str) -> str | None:
         return version(name)
     except PackageNotFoundError:
         return None
-
-
-def _squidpy_commit() -> str | None:
-    """The exact squidpy commit, read from pip's VCS install record (``direct_url.json``).
-
-    A ``git+https://...@<sha>`` install records the resolved commit here, so a container built
-    from the pinned fork stamps its own provenance without anyone passing it in.
-    """
-    try:
-        raw = distribution("squidpy").read_text("direct_url.json")
-    except (PackageNotFoundError, FileNotFoundError):
-        return None
-    if not raw:
-        return None
-    return json.loads(raw).get("vcs_info", {}).get("commit_id")
 
 
 def execute(notebook: Path, output_dir: Path, *, timeout: int = 5400) -> Path:
@@ -122,7 +109,7 @@ def execute(notebook: Path, output_dir: Path, *, timeout: int = 5400) -> Path:
     manifest = {
         "notebook": notebook.name,
         "packages": {name: _package_version(name) for name in ("squidpy", "squidpy-ports", "jax", "jaxlib", "torch")},
-        "squidpy_commit": _squidpy_commit(),
+        "squidpy_commit": upstream.squidpy_commit(),
     }
     (output_dir / f"{stem}-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return executed

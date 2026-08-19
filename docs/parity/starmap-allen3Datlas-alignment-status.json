@@ -1,6 +1,6 @@
 {
-    "failures": {},
-    "statuses": {
-        "starmap-allen3Datlas-alignment.ipynb": "unsupported-3d"
-    }
+  "failures": {},
+  "statuses": {
+    "starmap-allen3Datlas-alignment.ipynb": "compared"
+  }
 }

@@ -1,18 +1,19 @@
 {
-    "host": "supergpu25.scidom.de",
-    "note": null,
-    "notebook": "merfish-merfish-alignment.ipynb",
-    "packages": {
-        "jax": "0.11.0",
-        "jaxlib": "0.11.0",
-        "squidpy": "1.8.3.dev0",
-        "squidpy-ports": "0.0.1",
-        "torch": "2.13.0"
-    },
-    "python": "3.13.14",
-    "slurm_job_id": "38960583",
-    "squidpy_seconds": 9.265269244089723,
-    "status": "compared",
-    "upstream_seconds": 384.0079981330782,
-    "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
+  "host": "supergpu24.scidom.de",
+  "note": null,
+  "notebook": "merfish-merfish-alignment.ipynb",
+  "packages": {
+    "jax": "0.11.1",
+    "jaxlib": "0.11.1",
+    "squidpy": "1.8.3.dev0",
+    "squidpy-ports": "0.0.1",
+    "torch": "2.13.0"
+  },
+  "python": "3.13.14",
+  "slurm_job_id": "39588493",
+  "squidpy_commit": "9735ba3c8198ba279f3f688df92ba5a6876e28c4",
+  "squidpy_seconds": 6.762261255993508,
+  "status": "compared",
+  "upstream_seconds": 403.75459407496965,
+  "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }

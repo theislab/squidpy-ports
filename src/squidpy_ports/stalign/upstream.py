@@ -9,6 +9,7 @@ keeps a GPL-3.0 project out of this package's dependency metadata.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 from functools import cache
@@ -16,7 +17,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-__all__ = ["UPSTREAM_SHA", "UPSTREAM_URL", "load", "lddmm_with_grads", "vendor_root"]
+__all__ = ["UPSTREAM_SHA", "UPSTREAM_URL", "load", "lddmm_with_grads", "squidpy_commit", "vendor_root"]
 
 #: The single upstream commit this package is a reference for. Upstream has no tags and
 #: no releases; without a pin, "correct" silently changes under us.
@@ -47,6 +48,31 @@ def _checkout_sha(root: Path) -> str:
         f"cannot verify vendored STalign at {root}: Git metadata is unavailable and "
         "`SQUIDPY_PORTS_STALIGN_SHA` was not set by the staging job"
     )
+
+
+def squidpy_commit() -> str | None:
+    """The squidpy commit a result came from, or ``None`` when it cannot be proven.
+
+    Mirrors :func:`_checkout_sha`. A ``git+https://...@<sha>`` install records the resolved
+    commit in pip's ``direct_url.json``, so a container built from the pinned fork stamps its
+    own provenance. An **editable** install of a working tree records only a directory, which
+    is why the staged cluster job resolves the commit while Git metadata is still available
+    and passes it in as ``SQUIDPY_COMMIT``.
+
+    Returns ``None`` rather than guessing: a manifest claiming a commit it cannot substantiate
+    is worse than one admitting it does not know.
+    """
+    from importlib.metadata import PackageNotFoundError, distribution
+
+    try:
+        raw = distribution("squidpy").read_text("direct_url.json")
+    except (PackageNotFoundError, FileNotFoundError):
+        raw = None
+    if raw:
+        commit = json.loads(raw).get("vcs_info", {}).get("commit_id")
+        if commit:
+            return commit
+    return os.environ.get("SQUIDPY_COMMIT") or None
 
 
 @cache
@@ -112,9 +138,11 @@ def lddmm_with_grads(
     st: ModuleType,
     *,
     niter: int,
+    entry: str = "LDDMM",
+    to_A: str = "to_A",
     **kwargs: Any,
 ) -> tuple[dict[str, Any], dict[str, list]]:
-    """Run the real upstream ``LDDMM`` and capture what it never returns.
+    """Run a real upstream LDDMM loop and capture what it never returns.
 
     Upstream keeps the objective in a local ``Esave`` list and zeroes ``.grad`` at
     STalign.py:1210-1211 before returning, so ``E``, ``dE/dL`` and ``dE/dT`` are
@@ -127,15 +155,25 @@ def lddmm_with_grads(
       by monkeypatching ``to_A``, which :1155 calls with them every iteration. Hooks
       fire during ``E.backward()``, hence before the zeroing.
 
+    Parameters
+    ----------
+    entry
+        Which upstream loop to run. ``"LDDMM_3D_to_slice"`` is the volume-to-section one
+        (STalign.py:1318); its loop is structured the same way but builds its affine with
+        a different function, hence ``to_A``.
+    to_A
+        Name of the affine builder that loop calls every iteration, which is where the
+        leaf tensors are reachable. ``"to_A_3D"`` for the 3D loop (STalign.py:1467).
+
     Returns
     -------
-    The ``LDDMM`` output dict, and a dict with per-iteration ``E``, ``L`` and ``T``.
+    The loop's output dict, and a dict with per-iteration ``E``, ``L`` and ``T``.
     """
     import torch
 
     captured: dict[str, list] = {"E": [], "L": [], "T": []}
 
-    real_to_A = st.to_A
+    real_to_A = getattr(st, to_A)
     real_backward = torch.Tensor.backward
     hooked = False
 
@@ -151,12 +189,12 @@ def lddmm_with_grads(
         captured["E"].append(float(self.detach()))
         return real_backward(self, *args, **kw)
 
-    st.to_A = spy_to_A
+    setattr(st, to_A, spy_to_A)
     torch.Tensor.backward = spy_backward
     try:
-        out = st.LDDMM(niter=niter, **kwargs)
+        out = getattr(st, entry)(niter=niter, **kwargs)
     finally:
-        st.to_A = real_to_A
+        setattr(st, to_A, real_to_A)
         torch.Tensor.backward = real_backward
 
     # If upstream ever reorders, fail here rather than silently comparing the wrong thing.

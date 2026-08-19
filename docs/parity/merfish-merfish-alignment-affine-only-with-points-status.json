@@ -1,6 +1,6 @@
 {
-    "failures": {},
-    "statuses": {
-        "merfish-merfish-alignment-affine-only-with-points.ipynb": "compared-affine"
-    }
+  "failures": {},
+  "statuses": {
+    "merfish-merfish-alignment-affine-only-with-points.ipynb": "compared-affine"
+  }
 }

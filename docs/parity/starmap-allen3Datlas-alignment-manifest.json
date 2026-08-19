@@ -1,18 +1,19 @@
 {
-    "host": "supergpu30.scidom.de",
-    "note": "Not numerically compared: this upstream notebook calls LDDMM_3D_to_slice. Squidpy currently implements the 2D LDDMM solver only; a separate volume-to-image estimator is required for an honest comparison.",
-    "notebook": "starmap-allen3Datlas-alignment.ipynb",
-    "packages": {
-        "jax": "0.11.0",
-        "jaxlib": "0.11.0",
-        "squidpy": "1.8.3.dev0",
-        "squidpy-ports": "0.0.1",
-        "torch": "2.13.0"
-    },
-    "python": "3.13.14",
-    "slurm_job_id": "38960635",
-    "squidpy_seconds": 0.0,
-    "status": "unsupported-3d",
-    "upstream_seconds": 0.0,
-    "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
+  "host": "supergpu17.scidom.de",
+  "note": "This notebook fits a 3D volume to a 2D section. The two sides are *expected* to differ numerically here, unlike every 2D notebook above: upstream's 3D regularisation energy transforms two of the three spatial axes (`dim=(1,2)`, STalign.py:1504) while smoothing that same energy's gradient over all three (`dim=(1,2,3)`, :1527), so it descends on a different objective than the one it reports. Squidpy uses every spatial axis in both places. The divergence below measures that deliberate choice -- see `docs/STALIGN_DIVERGENCES.md` row D11 -- and is not a port defect. Its cell [6] also reads the STARmap table through an absolute path on the notebook author's own machine (`/home/manju/Documents/...`), the only such path in the pinned notebook set; the replay rewrites the leading directories to the `../starmap_data/` convention the other notebooks use. Same file, same bytes.",
+  "notebook": "starmap-allen3Datlas-alignment.ipynb",
+  "packages": {
+    "jax": "0.11.1",
+    "jaxlib": "0.11.1",
+    "squidpy": "1.8.3.dev0",
+    "squidpy-ports": "0.0.1",
+    "torch": "2.13.0"
+  },
+  "python": "3.13.14",
+  "slurm_job_id": "39589409",
+  "squidpy_commit": "9735ba3c8198ba279f3f688df92ba5a6876e28c4",
+  "squidpy_seconds": 15.84664102899842,
+  "status": "compared",
+  "upstream_seconds": 44.45199026801856,
+  "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }

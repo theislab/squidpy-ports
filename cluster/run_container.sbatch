@@ -24,4 +24,13 @@ OUTPUT_DIR="${3:?durable output dir}"
 
 command -v apptainer >/dev/null 2>&1 || { echo "apptainer not on PATH (try: module load apptainer)" >&2; exit 2; }
 mkdir -p "$OUTPUT_DIR"
-apptainer run --nv --writable-tmpfs --bind "$OUTPUT_DIR:/output" "$SIF" "$NOTEBOOK"
+# `STALIGN_NOTEBOOK_DIR` binds a host copy of the comparison notebooks over the ones baked
+# into the image. The image is the reproducible artifact and normally supplies them; this
+# exists so a notebook fix can be tested against the real environment without a 25-minute
+# rebuild first. Leave it unset for a reproduction run.
+BINDS=(--bind "$OUTPUT_DIR:/output")
+if [[ -n "${STALIGN_NOTEBOOK_DIR:-}" ]]; then
+    BINDS+=(--bind "$STALIGN_NOTEBOOK_DIR:/opt/squidpy-ports/docs/notebooks")
+    echo "### notebooks bound from $STALIGN_NOTEBOOK_DIR (not the image's own)"
+fi
+apptainer run --nv --writable-tmpfs "${BINDS[@]}" "$SIF" "$NOTEBOOK"

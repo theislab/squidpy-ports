@@ -8,11 +8,12 @@ test suite quietly becomes meaningless.
 
 from __future__ import annotations
 
-import inspect
 import json
 import os
+import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -24,53 +25,17 @@ from squidpy_ports.stalign import fixtures as F
 from squidpy_ports.stalign import upstream
 from squidpy_ports.stalign.notebook_suite import (
     NOTEBOOKS,
+    PORT_DEFAULTS,
+    PORT_PARAMETERS,
     THREE_D_NOTEBOOKS,
     UNREPLAYABLE_NOTEBOOKS,
     _convert_kwargs,
+    _initial_affine_xyz,
+    jax_defaults,
     jax_parameters,
     notebook_for_index,
     write_failure,
-    write_notebook_wrappers,
 )
-
-#: Names and default *types* of squidpy's ``lddmm``, mirrored so the argument conversion
-#: is testable in an environment without squidpy and JAX (neither is installed here or in
-#: CI; both only exist inside the GPU comparison job). `test_port_signature_matches_the_mirror`
-#: fails wherever they *are* installed if the port's signature drifts from this.
-PORT_DEFAULTS: dict[str, Any] = {
-    "xI": inspect.Parameter.empty,
-    "I": inspect.Parameter.empty,
-    "xJ": inspect.Parameter.empty,
-    "J": inspect.Parameter.empty,
-    "L": inspect.Parameter.empty,
-    "T": inspect.Parameter.empty,
-    "initial_velocity": None,
-    "velocity_grid": None,
-    "points_source": None,
-    "points_target": None,
-    "a": 500.0,
-    "p": 2.0,
-    "expand": 2.0,
-    "nt": 3,
-    "niter": 5000,
-    "diffeo_start": 0,
-    "epL": 2e-8,
-    "epT": 2e-1,
-    "epV": 2e3,
-    "sigmaM": 1.0,
-    "sigmaB": 2.0,
-    "sigmaA": 5.0,
-    "sigmaR": 5e5,
-    "sigmaP": 2e1,
-    "muA": None,
-    "muB": None,
-    "tol": None,
-    "patience": 25,
-}
-PORT_PARAMETERS = {
-    name: inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=default)
-    for name, default in PORT_DEFAULTS.items()
-}
 
 #: The port hands these to `jax.jit` as static arguments, so each one must arrive as a
 #: hashable Python scalar (`_core.py` `static_argnames`).
@@ -112,16 +77,6 @@ def test_notebook_suite_maps_every_upstream_notebook():
     found = {path.name for path in (upstream.vendor_root() / "docs" / "notebooks").glob("*.ipynb")}
     assert set(NOTEBOOKS) == found
     assert len(THREE_D_NOTEBOOKS) == 2
-
-
-def test_notebook_wrappers_are_one_to_one(tmp_path):
-    write_notebook_wrappers(tmp_path)
-    assert {path.name for path in tmp_path.glob("*.ipynb")} == set(NOTEBOOKS)
-    for path in tmp_path.glob("*.ipynb"):
-        payload = json.loads(path.read_text())
-        # nbformat 4.5 requires cell ids; without them the docs build warns, and `docs:build`
-        # runs sphinx with `-W`.
-        assert all(cell.get("id") for cell in payload["cells"]), path.name
 
 
 def test_clouds_are_deterministic():
@@ -191,21 +146,26 @@ def test_returned_affine_lags_one_step(stalign):
 
 
 def test_port_signature_matches_the_mirror():
-    """Where squidpy is installed, `PORT_DEFAULTS` must still describe its real signature.
+    """Where squidpy is installed, `PORT_DEFAULTS` must still describe the real port.
 
-    The conversion casts each captured argument using the port's declared default, so a
-    renamed parameter or an `int`-turned-`float` would change what the suite sends. This
-    repo cannot install squidpy (it is the thing under comparison, pulled in only inside
-    the GPU job), so the mirror above stands in -- and is checked here whenever it can be.
+    The conversion casts each captured argument to the type the mirror declares, so a
+    renamed parameter or an `int`-turned-`float` would change what the suite sends. squidpy
+    is not a dependency here (it is the thing under comparison), so the mirror stands in --
+    and is checked against the real thing whenever it can be.
+
+    Two halves, because the port splits them: the *names* come from `lddmm`'s signature,
+    while the *values* live in `_SOLVER_DEFAULTS` -- `lddmm` itself declares no defaults, so
+    that they exist in exactly one place.
     """
     pytest.importorskip("jax")
     pytest.importorskip("squidpy")
 
     real = jax_parameters()
     assert set(real) == set(PORT_DEFAULTS)
-    assert {name: type(p.default) for name, p in real.items()} == {
-        name: type(default) for name, default in PORT_DEFAULTS.items()
-    }
+
+    tuning = jax_defaults()
+    assert set(tuning) <= set(PORT_DEFAULTS), f"unmirrored tuning keys: {sorted(set(tuning) - set(PORT_DEFAULTS))}"
+    assert {name: PORT_DEFAULTS[name] for name in tuning} == dict(tuning)
 
 
 @pytest.mark.parametrize("wrap", [lambda v: v, np.asarray, torch.as_tensor], ids=["python", "numpy", "torch"])
@@ -477,16 +437,29 @@ def test_cli_index_runs_one_notebook_and_writes_its_status(tmp_path):
     """The array's entry point, end to end.
 
     A broken `--index` would waste a whole array submission, and the batch script has no
-    other way in. Index 2 is a 3D notebook: it emits a status panel without fitting
-    anything, so this stays cheap while still going through argparse, `compare_notebook`,
-    `write_result`, and the per-task status file.
+    other way in. Index 8 is the unreplayable notebook: it emits a status panel without
+    fitting anything, so this stays cheap while still going through argparse,
+    `compare_notebook`, `write_result`, and the per-task status file.
+
+    It used to use index 2, back when the 3D notebooks were also status panels. They now run
+    a real comparison -- which downloads the Allen atlas and fits for 2000 iterations, so
+    pointing this at one turns a one-second test into an hour-long one.
     """
-    notebook = notebook_for_index(2)
-    assert notebook in THREE_D_NOTEBOOKS  # keeps this test cheap; fails loudly if reordered
+    index = 8
+    notebook = notebook_for_index(index)
+    assert notebook in UNREPLAYABLE_NOTEBOOKS  # keeps this test cheap; fails loudly if reordered
 
     environment = {**os.environ, "MPLBACKEND": "agg", "SQUIDPY_PORTS_STALIGN_SHA": upstream.UPSTREAM_SHA}
     completed = subprocess.run(
-        [sys.executable, "-m", "squidpy_ports.stalign.notebook_suite", "--index", "2", "--output-dir", str(tmp_path)],
+        [
+            sys.executable,
+            "-m",
+            "squidpy_ports.stalign.notebook_suite",
+            "--index",
+            str(index),
+            "--output-dir",
+            str(tmp_path),
+        ],
         capture_output=True,
         text=True,
         env=environment,
@@ -497,7 +470,7 @@ def test_cli_index_runs_one_notebook_and_writes_its_status(tmp_path):
     stem = notebook.removesuffix(".ipynb")
     status = json.loads((tmp_path / f"{stem}-status.json").read_text())
     # Named after the notebook, not after the suite: array tasks share one output dir.
-    assert status["statuses"] == {notebook: "unsupported-3d"}
+    assert status["statuses"] == {notebook: "unreplayable-upstream"}
     assert status["failures"] == {}
     assert (tmp_path / f"{stem}-comparison.png").exists()
     assert (tmp_path / "notebooks" / notebook).exists()
@@ -638,3 +611,427 @@ def test_report_folds_parametrised_cases_and_separates_xfail_from_skip(tmp_path)
     page = render([("demo", source, list(functions.values()))])
     assert "ledger row D6" in page, "the reason has to survive into the page"
     assert "Runs three ways." in page, "descriptions come from the docstring, not a paraphrase"
+
+
+# --------------------------------------------------------------------------------------
+# The rank-3 (volume-to-section) comparison's conversion helpers
+# --------------------------------------------------------------------------------------
+
+
+def test_initial_affine_is_reversed_into_xy_z_order():
+    """Upstream's `A` is `(z, y, x)`; `fit_stalign_slice` takes `(x, y, z)`.
+
+    Reversing the *spatial* axes only is a permutation of the first three rows and columns.
+    A plain `[::-1, ::-1]` would move the homogeneous row too and silently produce a
+    different transform -- so this checks the translation lands where it belongs rather
+    than just that the shape is (4, 4).
+    """
+    affine_zyx = np.array(
+        [
+            [1.0, 0.0, 0.0, 7.0],
+            [0.0, 2.0, 0.0, 8.0],
+            [0.0, 0.0, 3.0, 9.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+    got = _initial_affine_xyz({"A": torch.as_tensor(affine_zyx)})
+
+    np.testing.assert_allclose(got[3], [0.0, 0.0, 0.0, 1.0])
+    np.testing.assert_allclose(got[:3, 3], [9.0, 8.0, 7.0])  # (z, y, x) -> (x, y, z)
+    np.testing.assert_allclose(np.diag(got)[:3], [3.0, 2.0, 1.0])
+    # Its own inverse: reversing twice is the identity.
+    swap = np.eye(4)[[2, 1, 0, 3]]
+    np.testing.assert_allclose(swap @ got @ swap, affine_zyx)
+
+
+def test_initial_affine_accepts_the_l_t_pair_the_notebooks_use():
+    """`merfish-allen3Datlas-alignment` cell [30] builds `L` and `T`, never a whole `A`."""
+    linear = np.diag([1.0, 2.0, 3.0])
+    translation = np.array([7.0, 8.0, 9.0])
+    from_pair = _initial_affine_xyz({"L": linear, "T": translation})
+    from_affine = _initial_affine_xyz({"A": np.block([[linear, translation[:, None]], [np.zeros((1, 3)), 1.0]])})
+
+    np.testing.assert_allclose(from_pair, from_affine)
+
+
+def test_initial_affine_is_none_when_the_notebook_specifies_nothing():
+    """Upstream defaults both to `None`, meaning identity -- which the port also defaults to."""
+    assert _initial_affine_xyz({"niter": 10}) is None
+
+
+def test_initial_affine_fills_in_the_half_the_notebook_omits():
+    """`L` without `T` (or the reverse) is legal upstream; the missing half is the identity."""
+    only_linear = _initial_affine_xyz({"L": np.diag([1.0, 2.0, 3.0])})
+    np.testing.assert_allclose(only_linear[:3, 3], 0.0)
+
+    only_translation = _initial_affine_xyz({"T": np.array([7.0, 8.0, 9.0])})
+    np.testing.assert_allclose(only_translation[:3, :3], np.eye(3))
+    np.testing.assert_allclose(only_translation[:3, 3], [9.0, 8.0, 7.0])
+
+
+def test_slice_fit_result_exposes_what_the_3d_notebooks_read():
+    """Cell [33] unpacks `A`, `v`, `xv` and `Xs`; the last is not stored on the result.
+
+    `Xs` is recomputed from the fitted deformation. Checked against the section grid it is
+    supposed to describe: with an identity affine and no velocity, the backward map is the
+    lifted section grid itself, so every sampled `z` is 0 and the `(y, x)` corners are the
+    axes' own endpoints.
+    """
+    pytest.importorskip("jax")
+    pytest.importorskip("squidpy")
+    import jax.numpy as jnp
+    from squidpy.experimental.tl import StalignSliceResult
+
+    from squidpy_ports.stalign.notebook_suite import _torch_slice_fit
+
+    section_axes = [np.linspace(-4.0, 4.0, 5), np.linspace(-6.0, 6.0, 7)]
+    grid = [np.linspace(-8.0, 8.0, 3)] * 3
+    result = StalignSliceResult(
+        affine=jnp.eye(4),
+        velocity=jnp.zeros((1, 3, 3, 3, 3)),
+        velocity_grid=tuple(jnp.asarray(axis) for axis in grid),
+        ref_axes=tuple(jnp.asarray(axis) for axis in grid),
+        query_axes=tuple(jnp.asarray(axis) for axis in section_axes),
+        match_weights=jnp.zeros((1, 5, 7)),
+        artifact_weights=jnp.zeros((1, 5, 7)),
+        background_weights=jnp.zeros((1, 5, 7)),
+    )
+    fit = _torch_slice_fit(result, section_axes)
+
+    # `.keys()`, not `set(fit)`: `_FitResult.__iter__` yields the positional tuple form.
+    assert set(fit.keys()) >= {"A", "v", "xv", "WM", "WA", "WB", "Xs"}
+    A, v, xv = fit  # the tuple-unpacking form `merfish-merfish-alignment-using-L-T` uses
+    assert A.shape == (4, 4) and v.shape == (1, 3, 3, 3, 3) and len(xv) == 3
+
+    # Upstream stores `Xs` component-*last*; squidpy's grid is component-first.
+    Xs = fit["Xs"].numpy()
+    assert Xs.shape == (1, 5, 7, 3)
+    np.testing.assert_allclose(Xs[..., 0], 0.0, atol=1e-12)  # the z=0 plane
+    np.testing.assert_allclose(Xs[0, :, 0, 1], section_axes[0], atol=1e-12)
+    np.testing.assert_allclose(Xs[0, 0, :, 2], section_axes[1], atol=1e-12)
+
+
+def test_atlas_cache_downloads_once_and_survives_a_fresh_cwd(tmp_path, monkeypatch):
+    """The atlas is fetched once, then served from the cache for every later pass.
+
+    This is the plumbing the 3D notebooks depend on: upstream re-GETs unconditionally and
+    each replay pass gets its own working directory, so without the cache one comparison
+    pulls the atlas four times. Two passes are simulated here by calling through twice.
+    """
+    from squidpy_ports.stalign.notebook_suite import ATLAS_CACHE_ENV, _AtlasCache, _patch_atlas_downloads
+
+    url = "http://download.alleninstitute.org/informatics-archive/x/ara_nissl_50.nrrd"
+    payload = b"nrrd-bytes" * 512
+    calls = []
+
+    class _Response:
+        def raise_for_status(self) -> None:
+            pass
+
+        def iter_content(self, chunk_size: int = 1024):
+            yield payload
+
+    class _Requests:
+        def get(self, target: str, *args: Any, **kwargs: Any) -> Any:
+            calls.append(target)
+            assert kwargs["stream"] is True  # streamed, not slurped into memory
+            return _Response()
+
+        marker = "passthrough"
+
+    cache = _AtlasCache(_Requests(), tmp_path)
+    first, second = cache.get(url), cache.get(url)
+
+    assert calls == [url], "the second pass re-downloaded instead of using the cache"
+    assert first.content == second.content == payload
+    assert b"".join(second.iter_content(64)) == payload
+    assert cache.marker == "passthrough"  # anything but `get` still reaches requests
+    assert not list(tmp_path.glob("*.partial")), "a staging file was left behind"
+
+    # Unset means untouched: a plain local run keeps upstream's own download behaviour.
+    module = type(sys)("stalign-stub")
+    module.requests = sentinel = object()
+    monkeypatch.delenv(ATLAS_CACHE_ENV, raising=False)
+    _patch_atlas_downloads(module)
+    assert module.requests is sentinel
+
+    monkeypatch.setenv(ATLAS_CACHE_ENV, str(tmp_path / "made-on-demand"))
+    _patch_atlas_downloads(module)
+    assert isinstance(module.requests, _AtlasCache)
+    _patch_atlas_downloads(module)  # idempotent: no cache wrapping a cache
+    assert module.requests._requests is sentinel
+
+
+def test_only_absolute_author_paths_are_rewritten():
+    """`starmap-allen3Datlas` reads its input from the author's home directory.
+
+    No symlink can rescue `/home/manju`, so the replay rewrites it -- but the relative
+    conventions the other notebooks use must survive untouched, including
+    `merfish-xenium`'s two-level one.
+    """
+    from squidpy_ports.stalign.notebook_suite import _clean_cell
+
+    assert (
+        _clean_cell('df = pd.read_csv(r"/home/manju/Documents/STalign_build/docs/starmap_data/well11.csv.gz")')
+        == 'df = pd.read_csv(r"../starmap_data/well11.csv.gz")'
+    )
+    for untouched in (
+        "df = pd.read_csv('../merfish_data/s1r1_metadata.csv.gz')",
+        "df = pd.read_csv('../../merfish_data/s1r1_metadata.csv.gz')",
+    ):
+        assert _clean_cell(untouched) == untouched
+
+    # The rewrite is exactly one notebook's problem: assert nothing else in the pinned set
+    # carries an absolute path, so this stays a targeted fix rather than a growing shim.
+    import json
+
+    from squidpy_ports.stalign import upstream
+
+    culprits = {
+        path.name
+        for path in (upstream.vendor_root() / "docs" / "notebooks").glob("*.ipynb")
+        for cell in json.loads(path.read_text())["cells"]
+        if cell["cell_type"] == "code"
+        for line in "".join(cell["source"]).splitlines()
+        if re.search(r"""['"]r?/(?!\*)""", line)
+    }
+    assert culprits == {"starmap-allen3Datlas-alignment.ipynb"}, culprits
+
+
+def test_reference_figures_are_verbatim_upstream_output():
+    """Every published figure on the comparison page is upstream's own, unrecomputed.
+
+    ``docs/_static/reference/SOURCES.md`` claims each PNG was copied verbatim from a named
+    cell of a pinned upstream notebook. That claim is the whole basis for calling those
+    panels "upstream's result" rather than "our replay of it", so it is checked by bytes
+    rather than trusted -- a regenerated or edited figure, or a wrong cell reference, fails
+    here. It caught one: `upstream-merfish-merfish.png` was documented as cell 44 of a
+    37-cell notebook.
+    """
+    import base64
+    import json
+    import re
+
+    from squidpy_ports.stalign import upstream
+
+    reference = Path(__file__).resolve().parents[1] / "docs" / "_static" / "reference"
+    rows = re.findall(
+        r"^\|\s*`([^`]+\.png)`\s*\|[^|]*\|\s*\[([^\]]+)\]\([^)]+\)\s*\|\s*(\d+)\s*\|",
+        (reference / "SOURCES.md").read_text(),
+        re.M,
+    )
+    assert len(rows) >= 11, f"SOURCES.md table did not parse; got {len(rows)} rows"
+
+    notebooks = upstream.vendor_root() / "docs" / "notebooks"
+    for name, notebook, cell in rows:
+        committed = reference / name
+        assert committed.exists(), f"{name} is listed in SOURCES.md but not present"
+        cells = json.loads((notebooks / notebook).read_text())["cells"]
+        assert int(cell) < len(cells), f"{name}: SOURCES.md cites cell {cell}, {notebook} has {len(cells)}"
+        published = [
+            base64.b64decode(output["data"]["image/png"])
+            for output in cells[int(cell)].get("outputs", [])
+            if "image/png" in output.get("data", {})
+        ]
+        assert committed.read_bytes() in published, (
+            f"{name} is not byte-identical to any image upstream committed at "
+            f"{notebook} cell {cell} -- it was recomputed, edited, or the cell is wrong"
+        )
+
+
+def test_region_colours_are_keyed_to_the_region_not_its_position():
+    """A region keeps its colour when the other pass assigns a different region set.
+
+    Upstream colours by index into `np.unique(df['acronym'])`, so one extra region recolours
+    every alphabetically later one and the pair looks wholly different for a reason that has
+    nothing to do with the fit. The first pass still reproduces upstream's own assignment, so
+    the panel stays comparable with upstream's published figure.
+    """
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    from squidpy_ports.stalign.notebook_suite import _REGION_COLOURS, _patch_region_colours
+
+    def frame(regions):
+        return pd.DataFrame({"acronym": regions, "x": range(len(regions)), "y": range(len(regions))})
+
+    module = type(sys)("stalign-stub")
+    _REGION_COLOURS.clear()
+    _patch_region_colours(module)
+    cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    # pass 1 (upstream): reproduces upstream's own position-indexed assignment
+    module.plot_brain_regions(frame(["CA1", "CA3", "DG-sg", "VISp4"]))
+    assert [_REGION_COLOURS[r] for r in ("CA1", "CA3", "DG-sg", "VISp4")] == cycle[:4]
+
+    # pass 2 (squidpy): "CA2" lands between CA1 and CA3, which under upstream's scheme would
+    # have shifted CA3, DG-sg and VISp4 each one colour along
+    module.plot_brain_regions(frame(["CA1", "CA2", "CA3", "DG-sg", "VISp4"]))
+    assert [_REGION_COLOURS[r] for r in ("CA1", "CA3", "DG-sg", "VISp4")] == cycle[:4]
+    assert _REGION_COLOURS["CA2"] == cycle[4], "a squidpy-only region must get an unused colour"
+    plt.close("all")
+
+
+def test_published_results_are_matched_only_where_upstream_shipped_this_commit_output():
+    """The published-result anchor resolves for exactly the notebooks it can be trusted for.
+
+    Upstream ships the output of its own runs, which is a stronger reference than either
+    replay pass. But three shipped files are headerless `%.18e` dumps with no
+    `aligned_x`/`aligned_y` -- they predate the `to_csv` call the pinned notebook makes, so
+    they are not this commit's output and must not be compared against.
+    """
+    import pandas as pd
+
+    from squidpy_ports.stalign.notebook_suite import NOTEBOOKS, _published_metrics, _published_result
+
+    resolved = {nb: _published_result(nb) for nb in NOTEBOOKS}
+    comparable = {
+        nb
+        for nb, path in resolved.items()
+        if path is not None and {"aligned_x", "aligned_y"} <= set(pd.read_csv(path, nrows=1).columns)
+    }
+    excluded = {nb for nb, path in resolved.items() if path is not None} - comparable
+
+    assert len(comparable) == 8, sorted(comparable)
+    assert excluded == {
+        "xenium-heimage-alignment.ipynb",
+        "xenium-starmap-alignment.ipynb",
+        "xenium-xenium-alignment.ipynb",
+    }, sorted(excluded)
+    # `heart-alignment` writes a result file upstream never committed.
+    assert resolved["heart-alignment.ipynb"] is None
+
+    # the comparison itself: exact agreement reads zero, and a row-count mismatch reports
+    # nothing rather than a number computed against different cells
+    notebook = "visium-visium-alignment-affine-only.ipynb"
+    published = pd.read_csv(_published_result(notebook))
+    exact = published[["aligned_x", "aligned_y"]].copy()
+    shifted = exact.copy()
+    shifted["aligned_x"] += 1.0
+
+    got = _published_metrics(notebook, {"results": exact}, {"results": shifted})
+    assert got["upstream vs upstream published relative L2"] == pytest.approx(0.0, abs=1e-12)
+    assert got["squidpy vs upstream published relative L2"] > 0
+
+    truncated = {"results": exact.iloc[:10]}
+    assert "upstream vs upstream published relative L2" not in _published_metrics(notebook, truncated, {})
+
+
+@pytest.mark.parametrize(
+    ("defaults", "entry"),
+    [("_SOLVER_DEFAULTS", "LDDMM"), ("_SLICE_DEFAULTS", "LDDMM_3D_to_slice")],
+    ids=["rank-2", "rank-3"],
+)
+def test_solver_defaults_match_upstream(defaults, entry):
+    """squidpy's own solver defaults are upstream's, so an omitted keyword is not a divergence.
+
+    `_jax_kwargs` and `fit_stalign_slice` fill every keyword a notebook did not pass, because
+    the port's solver is a bare kernel declaring none. Upstream fills the same omissions from
+    its signature. Both ranks are checked: the two allen3d notebooks pass none of the five
+    knobs where rank 3 differs from rank 2, so a drift there would reach the published `v` as
+    a fake D11 divergence rather than as an error.
+    """
+    import inspect as _inspect
+
+    pytest.importorskip("squidpy")
+    from squidpy.experimental.tl._align import _stalign
+
+    from squidpy_ports.stalign import upstream
+
+    port = getattr(_stalign, defaults)
+    signature = _inspect.signature(getattr(upstream.load(), entry)).parameters
+    theirs = {n: p.default for n, p in signature.items() if p.default is not _inspect.Parameter.empty}
+    shared = {name: value for name, value in port.items() if name in theirs}
+    assert shared, f"{defaults} shares no keyword with {entry} -- nothing is being checked"
+    drifted = {n: (v, theirs[n]) for n, v in shared.items() if v != theirs[n]}
+    assert not drifted, f"{defaults} drifted from upstream {entry}: {drifted}"
+
+
+def test_rank_three_defaults_are_actually_different_from_rank_two():
+    """The five knobs where upstream's 3D entry point departs from its 2D one.
+
+    If `_SLICE_DEFAULTS` were ever collapsed into `_SOLVER_DEFAULTS`, the test above would
+    still pass on every shared key while the rank-3 fit silently ran with 2D step sizes.
+    """
+    pytest.importorskip("squidpy")
+    from squidpy.experimental.tl._align import _stalign
+
+    differing = {
+        name
+        for name, value in _stalign._SLICE_DEFAULTS.items()
+        if name in _stalign._SOLVER_DEFAULTS and _stalign._SOLVER_DEFAULTS[name] != value
+    }
+    assert differing == {"expand", "epL", "epT", "epV", "sigmaR"}, sorted(differing)
+
+
+def test_results_table_header_matches_its_rows():
+    """The published table's column titles have to describe the cells under them.
+
+    The header and the row are built by two separate f-strings, so they can disagree
+    silently -- and did: `Test functions` sat above the prose label and `Cases` above the
+    function count, in a table `docs/correctness.md` includes verbatim.
+    """
+    from squidpy_ports.stalign.test_report import TestFunction, render
+
+    functions = [
+        TestFunction(name="test_one", doc="first", outcomes=Counter({"passed": 2})),
+        TestFunction(name="test_two", doc="second", outcomes=Counter({"passed": 1})),
+    ]
+    table = render([("what it covers", Path("test_demo.py"), functions)])
+    # the first three are the per-suite summary; `render` also emits a per-test detail table
+    header, _, row = [line for line in table.splitlines() if line.startswith("|")][:3]
+    columns = [c.strip() for c in header.strip("|").split("|")]
+    cells = [c.strip() for c in row.strip("|").split("|")]
+    assert len(columns) == len(cells)
+
+    by_column = dict(zip(columns, cells, strict=True))
+    assert by_column["Suite"] == "`test_demo.py`"
+    assert by_column["What it covers"] == "what it covers"
+    assert by_column["Test functions"] == "2", "the function count must sit under its own title"
+    assert "3 cases" in by_column["Result"], "the case total belongs in Result, not in a count column"
+
+
+def test_squidpy_commit_prefers_the_install_record_and_never_guesses(monkeypatch):
+    """A manifest may record the squidpy commit only when it can prove it.
+
+    A VCS install carries the resolved sha in pip's metadata; an editable install of a
+    working tree carries only a directory, which is why the staged cluster job resolves the
+    commit itself and passes `SQUIDPY_COMMIT`. With neither, the answer is `None` -- a
+    manifest admitting it does not know beats one asserting a commit it cannot substantiate.
+    """
+    from squidpy_ports.stalign import upstream
+
+    monkeypatch.delenv("SQUIDPY_COMMIT", raising=False)
+    # no install record, no env var -> no claim
+    monkeypatch.setattr("importlib.metadata.distribution", lambda _: (_ for _ in ()).throw(FileNotFoundError))
+    assert upstream.squidpy_commit() is None
+
+    # the staged job's value is used when pip cannot answer
+    monkeypatch.setenv("SQUIDPY_COMMIT", "0123456789abcdef")
+    assert upstream.squidpy_commit() == "0123456789abcdef"
+
+    # an empty env var is not a commit
+    monkeypatch.setenv("SQUIDPY_COMMIT", "")
+    assert upstream.squidpy_commit() is None
+
+
+def test_numpy_shim_only_touches_device_tensors_and_restores_itself():
+    """Upstream's `.numpy()` calls must survive the replay's device override, and only that.
+
+    The override is what makes those calls fail; the shim undoes the artifact rather than
+    changing upstream's behaviour. A CPU tensor must go through the untouched path, and
+    `torch.Tensor.numpy` must be exactly what it was once the replay ends.
+    """
+    import torch
+
+    from squidpy_ports.stalign.notebook_suite import _tensors_convertible_to_numpy
+
+    before = torch.Tensor.numpy
+    with _tensors_convertible_to_numpy():
+        assert torch.Tensor.numpy is not before, "the shim did not install"
+        np.testing.assert_allclose(torch.tensor([1.0, 2.0]).numpy(), [1.0, 2.0])
+        # a tensor needing grad still refuses without an explicit detach on CPU, exactly as
+        # upstream would see it -- the shim must not paper over unrelated errors
+        with pytest.raises(RuntimeError):
+            torch.tensor([1.0], requires_grad=True).numpy()
+    assert torch.Tensor.numpy is before, "the shim outlived the replay"

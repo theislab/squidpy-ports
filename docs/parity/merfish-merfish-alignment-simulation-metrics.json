@@ -1,9 +1,11 @@
 {
-  "A relative L2": 0.00024325951757671476,
+  "A relative L2": 0.0002432595175732692,
   "extentI relative L2": 0.0,
   "extentJ relative L2": 0.0,
-  "tpointsI relative L2": 1.5740866326335816e-06,
-  "v relative L2": 4.668733265302934e-15,
+  "tpointsI relative L2": 1.5740866326324597e-06,
+  "v relative L2": 1.6727218135598042e-15,
   "xI0 relative L2": 0.0,
-  "yI0 relative L2": 0.0
+  "xI_LDDMM relative L2": 1.9972502602447386e-07,
+  "yI0 relative L2": 0.0,
+  "yI_LDDMM relative L2": 2.606873261082365e-06
 }

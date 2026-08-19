@@ -1,6 +1,6 @@
 {
-    "failures": {},
-    "statuses": {
-        "xenium-xenium-alignment.ipynb": "compared"
-    }
+  "failures": {},
+  "statuses": {
+    "xenium-xenium-alignment.ipynb": "compared"
+  }
 }

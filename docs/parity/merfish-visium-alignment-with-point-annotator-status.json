@@ -1,6 +1,6 @@
 {
-    "failures": {},
-    "statuses": {
-        "merfish-visium-alignment-with-point-annotator.ipynb": "compared"
-    }
+  "failures": {},
+  "statuses": {
+    "merfish-visium-alignment-with-point-annotator.ipynb": "compared"
+  }
 }

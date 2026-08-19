@@ -1,14 +1,14 @@
 {
-  "A relative L2": 2.4082929779819113e-05,
+  "A relative L2": 2.4082929800524362e-05,
   "df2 relative L2": 0.0,
   "extentI relative L2": 0.0,
   "extentJ relative L2": 0.0,
   "levels relative L2": 0.0,
-  "phi relative L2": 5.308884437729314e-07,
-  "phiI relative L2": 9.346536107082516e-06,
-  "phii relative L2": 5.221093225778222e-07,
-  "phiiJ relative L2": 9.624528552540251e-06,
+  "phi relative L2": 5.30888443657123e-07,
+  "phiI relative L2": 9.346536107554363e-06,
+  "phii relative L2": 5.221093224572607e-07,
+  "phiiJ relative L2": 9.62452855284232e-06,
   "tpointsI relative L2": 0.0,
-  "tpointsJ relative L2": 4.341015419261138e-07,
-  "v relative L2": 3.212331549358755e-14
+  "tpointsJ relative L2": 4.3410154195381647e-07,
+  "v relative L2": 1.1027627551726172e-14
 }

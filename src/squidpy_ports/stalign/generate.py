@@ -554,6 +554,211 @@ def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
     )
 
 
+#: Solver settings for the volume-to-section path. Upstream's `LDDMM_3D_to_slice`
+#: defaults (`a=500`, `expand=1.25`) assume a real 50um atlas; on a fixture-sized volume
+#: `a=500` collapses the velocity grid to a single sample, so the kernel width is scaled
+#: down the same way `IMAGE_PARAMS` does. `sigmaR` is upstream's 3D default.
+#:
+#: `epL`/`epT` are three orders below upstream's 3e-D defaults for a measured reason: at
+#: `epL=1e-6, epT=1e1` the very first step throws the section clean off the volume, where
+#: border padding makes the objective constant and its gradient exactly zero -- the run
+#: then sits at E=481.85 forever. A comparison in that regime says nothing about either
+#: implementation, so the steps are the largest of the probed pairs that actually descend
+#: (E 48.126 -> 47.957 over 8 iterations).
+SLICE_PARAMS = {
+    "a": 8.0,
+    "p": 2.0,
+    "expand": 1.25,
+    "nt": 2,
+    "epL": 1e-9,
+    "epT": 1e-2,
+    "epV": 1.0,
+    "sigmaR": 1e8,
+}
+SLICE_ITERS = 12
+
+#: Off-grid start for the 3D comparison, for the reason spelled out at `IMAGE_THETA`:
+#: centred voxel axes are integers, and an identity start would put every interpolation
+#: sample exactly on a grid line, where the comparison measures ledger row D10 rather
+#: than the port. The z shift is deliberately not a whole number of slices.
+SLICE_THETA = 0.0271833
+SLICE_SCALE = 0.93
+SLICE_SHIFT = (0.6137, 0.41372, -0.28913)
+
+
+def _slice_inputs(st, clouds: F.Clouds):
+    """A reference volume and a single section cut from it, plus their axes.
+
+    Built here rather than in ``fixtures.py`` so that file's checksum -- which pins the
+    whole 2D bundle -- stays untouched. The volume is the existing reference raster swept
+    along a third axis with a per-slice roll, so its structure genuinely moves with ``z``:
+    a separable product would leave the out-of-plane gradient near zero and the fit would
+    have nothing to find.
+
+    The reference carries **two** channels and the section **one**, which is upstream's
+    own recipe (``merfish-allen3Datlas-alignment`` cell [24] concatenates the normalised
+    Nissl volume with its centred square) and the case a same-channel-count check would
+    reject.
+    """
+    (_, _, image_query), (_, _, image_ref) = _rasters(st, clouds)
+    base = np.asarray(image_ref[1], dtype=float)
+    n_z = 9
+    volume = np.stack([np.roll(base, shift=index - n_z // 2, axis=1) for index in range(n_z)])
+    volume = volume * np.exp(-(((np.arange(n_z) - n_z / 2.0) / 3.0) ** 2))[:, None, None]
+
+    normalised = volume[None] / np.mean(np.abs(volume))
+    reference = np.concatenate((normalised, (normalised - np.mean(normalised)) ** 2))
+    section = np.asarray(image_query[1:2], dtype=float)
+    section = section / np.mean(np.abs(section))
+
+    x_reference = _centred_axes(reference.shape[1:])
+    x_section = _centred_axes(section.shape[1:])
+    return reference, x_reference, section, x_section
+
+
+def _slice_start() -> tuple[np.ndarray, np.ndarray]:
+    """The initial affine, in the ``(z, y, x)`` array order both sides work in.
+
+    An in-plane rotation about the out-of-plane axis, then a uniform scale -- the same
+    construction ``fit_stalign_slice``'s ``initial_rotation`` / ``initial_scale`` build,
+    and the notebook's cell [30] with ``scale_x == scale_y == scale_z``.
+    """
+    cos, sin = np.cos(SLICE_THETA), np.sin(SLICE_THETA)
+    rotation = np.array([[1.0, 0.0, 0.0], [0.0, cos, -sin], [0.0, sin, cos]])
+    return SLICE_SCALE * rotation, np.array(SLICE_SHIFT)
+
+
+def _write_slice(st, clouds: F.Clouds, out: Path) -> None:
+    """Upstream ``LDDMM_3D_to_slice``, in the two regimes that can be compared.
+
+    The velocity is frozen for the trajectory comparison (``diffeo_start`` past
+    ``niter``, so the ``it >= diffeo_start`` gate at STalign.py:1519 never opens and ``v``
+    stays at zero). That is not a way of avoiding a hard case -- it is the only regime in
+    which upstream's 3D objective and a correct one *agree*, so it is the only one where
+    the trajectory is a statement about the port rather than about the discrepancy below.
+
+    ``ER`` is emitted twice at a non-zero velocity to measure that discrepancy. Upstream
+    transforms two of the three spatial axes in the energy (``dim=(1,2)`` at
+    STalign.py:1504) while smoothing its gradient over all three (``dim=(1,2,3)`` at
+    :1527), so the regulariser it descends on is not the one it evaluates. ``ER_2axis``
+    quotes upstream's expression verbatim; ``ER_3axis`` is the same expression with the
+    energy's axes corrected to match the smoothing. At rank 2 the two coincide, which is
+    why this only appears here. Both are computed from upstream's own ``v`` and ``LL``.
+    """
+    import torch
+
+    reference, x_reference, section, x_section = _slice_inputs(st, clouds)
+    linear, translation = _slice_start()
+
+    kwargs = dict(
+        xI=x_reference,
+        I=reference,
+        xJ=x_section,
+        J=section,
+        L=linear,
+        T=translation,
+        **SLICE_PARAMS,
+    )
+    frozen = dict(kwargs, diffeo_start=SLICE_ITERS + 1)
+    run = st.LDDMM_3D_to_slice(niter=SLICE_ITERS, **frozen)
+    # Divergence D4 again: upstream builds A at the top of each iteration and returns it.
+    nxt = st.LDDMM_3D_to_slice(niter=SLICE_ITERS + 1, **frozen)
+    _, captured = upstream.lddmm_with_grads(st, niter=SLICE_ITERS, entry="LDDMM_3D_to_slice", to_A="to_A_3D", **frozen)
+    if not np.allclose(run["v"].numpy(), 0.0):
+        raise RuntimeError("the velocity moved despite diffeo_start > niter; STalign.py:1519 has changed")
+
+    xv = [axis.numpy() for axis in run["xv"]]
+    velocity = _smooth_velocity_3d(xv, SLICE_PARAMS["nt"])
+
+    # LL/K/DV: four statements inside the loop with no function boundary, so quoted
+    # verbatim from STalign.py:1384-1397 -- the one documented exception in this module.
+    dv = torch.as_tensor([x[1] - x[0] for x in xv], dtype=torch.float64)
+    shape = tuple(len(x) for x in xv)
+    fv = [torch.arange(n, dtype=torch.float64) / n / d for n, d in zip(shape, dv, strict=True)]
+    FV = torch.stack(torch.meshgrid(*fv, indexing="ij"), -1)
+    LL = (1.0 + 2.0 * SLICE_PARAMS["a"] ** 2 * torch.sum((1.0 - torch.cos(2.0 * np.pi * FV * dv)) / dv**2, -1)) ** (
+        SLICE_PARAMS["p"] * 2.0
+    )
+    K = 1.0 / LL
+    DV = torch.prod(dv)
+
+    v_t = torch.as_tensor(velocity, dtype=torch.float64)
+    er_2axis = (
+        torch.sum(torch.sum(torch.abs(torch.fft.fftn(v_t, dim=(1, 2))) ** 2, dim=(0, -1)) * LL)
+        * DV / 2.0 / v_t.shape[1] / v_t.shape[2] / SLICE_PARAMS["sigmaR"] ** 2
+    )  # fmt: skip
+    er_3axis = (
+        torch.sum(torch.sum(torch.abs(torch.fft.fftn(v_t, dim=(1, 2, 3))) ** 2, dim=(0, -1)) * LL)
+        * DV / 2.0 / v_t.shape[1] / v_t.shape[2] / v_t.shape[3] / SLICE_PARAMS["sigmaR"] ** 2
+    )  # fmt: skip
+
+    # `Xs` is the map the objective samples the volume through, and the same quantity
+    # `analyze3Dalign` turns into `coord0`/`coord1`/`coord2` (STalign.py:2001-2003).
+    section_grid = np.stack(np.meshgrid(np.zeros(1), x_section[0], x_section[1], indexing="ij"), -1)
+    grid_backward = st.build_transform3D(
+        xv, velocity, nxt["A"].numpy(), direction="b", XJ=torch.as_tensor(section_grid)
+    )
+    # interp3D on the same points, which is what `sample_reference` has to reproduce.
+    sampled = st.interp3D(
+        [torch.as_tensor(x) for x in x_reference],
+        torch.as_tensor(reference),
+        grid_backward.permute(-1, 0, 1, 2),
+        padding_mode="border",
+    )
+    sampled_nearest = st.interp3D(
+        [torch.as_tensor(x) for x in x_reference],
+        torch.as_tensor(reference),
+        grid_backward.permute(-1, 0, 1, 2),
+        mode="nearest",
+        padding_mode="border",
+    )
+
+    np.savez_compressed(
+        out / "slice_trajectory.npz",
+        __provenance__=_provenance(section="slice_trajectory", niter=SLICE_ITERS),
+        start_L=linear,
+        start_T=translation,
+        ref_axis_0=x_reference[0],
+        ref_axis_1=x_reference[1],
+        ref_axis_2=x_reference[2],
+        query_axis_0=x_section[0],
+        query_axis_1=x_section[1],
+        ref=reference,
+        query=section,
+        A=nxt["A"].numpy(),
+        A_stale=run["A"].numpy(),
+        to_A=st.to_A_3D(torch.as_tensor(linear), torch.as_tensor(translation)).detach().numpy(),
+        WM=run["WM"].numpy(),
+        WA=run["WA"].numpy(),
+        WB=run["WB"].numpy(),
+        Xs=run["Xs"].numpy(),
+        energies=np.asarray(captured["E"], dtype=float),
+        grad_L=torch.stack(captured["L"]).numpy(),
+        grad_T=torch.stack(captured["T"]).numpy(),
+        xv_0=xv[0],
+        xv_1=xv[1],
+        xv_2=xv[2],
+        velocity=velocity,
+        regularizer_LL=LL.numpy(),
+        regularizer_K=K.numpy(),
+        regularizer_DV=DV.numpy(),
+        ER_2axis=np.array(float(er_2axis)),
+        ER_3axis=np.array(float(er_3axis)),
+        grid_backward=grid_backward.numpy(),
+        interp_border=sampled.numpy(),
+        interp_nearest=sampled_nearest.numpy(),
+    )
+
+
+def _smooth_velocity_3d(xv, nt: int) -> np.ndarray:
+    """:func:`_smooth_velocity` at rank 3 -- low frequency, one cumsum per spatial axis."""
+    rng = np.random.default_rng(F.SEED + 3)
+    field = rng.normal(scale=12.0, size=(nt, xv[0].size, xv[1].size, xv[2].size, 3))
+    for axis in (1, 2, 3):
+        field = np.cumsum(field, axis=axis)
+    return field / (xv[0].size * xv[1].size * xv[2].size)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Generate the whole bundle."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -572,6 +777,7 @@ def main(argv: list[str] | None = None) -> int:
         ("trajectory", _write_trajectory),
         ("image_trajectory", _write_image_trajectory),
         ("image_trajectory_matched", _write_image_trajectory_matched),
+        ("slice_trajectory", _write_slice),
     ):
         print(f"generating {step}...", flush=True)
         fn(st, clouds, args.out)

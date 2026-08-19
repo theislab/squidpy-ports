@@ -1,6 +1,6 @@
 {
-    "failures": {},
-    "statuses": {
-        "xenium-starmap-alignment.ipynb": "compared"
-    }
+  "failures": {},
+  "statuses": {
+    "xenium-starmap-alignment.ipynb": "compared"
+  }
 }
