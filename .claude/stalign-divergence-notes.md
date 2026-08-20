@@ -48,7 +48,67 @@ translation relative L2 of `0.0037151724`, and a median aligned-landmark delta o
 coordinate units -- reproducing the earlier partial job 38938878 to every recorded digit
 (that partial result directory has been removed, superseded by this complete run).
 
+## In flight at the last laptop switch (2026-08-20)
+
+Written down because the last switch lost a day's work. Everything below is pushed; the only
+thing not in git is the cluster output, which is on Lustre.
+
+- **Canonical sweep `39759108`** -- all 17 notebooks, clean squidpy `2bff194f` from
+  `stalign-3d/squidpy-clone` (a real git checkout, so manifests resolve provenance
+  themselves), harness fix `9f1d087`, determinism pinned, convergence panels on. This is the
+  run meant to replace `docs/parity/` and the executed notebooks on the site. **The docs pass
+  had not been done yet**: sync the 17 metrics/manifests/statuses plus
+  `notebooks/*.ipynb` into `docs/`, regenerate the two tables in `docs/parity.md` (largest
+  `<var> relative L2`, excluding `*published*`), rebuild under `-W`, commit, push.
+- **D11 flag runs `39758694-97`** -- `merfish-allen3Datlas` only, two reps each of flag off /
+  on, serialized on `supergpu21`. Numbers and what they do and do not support are in the TODO
+  above.
+- **`SQUIDPY_STALIGN_UPSTREAM_REG_ENERGY_AXES`** lives on squidpy commit `b10e35a1`
+  (`feat/experimental-fit-core`), **committed locally and never pushed**. Comparison-only. If
+  it is not pushed, the D11 measurement is not reproducible by anyone else -- decide either
+  way, but do not leave it dangling.
+- **Cluster layout**: `stalign-3d/squidpy-clone` (git, canonical), `squidpy-regaxes` (rsynced,
+  carries the flag), `squidpy-2bff194f` (older rsync), `squidpy-ports` (rsynced working copy).
+  Prefer the clone and `git fetch` from now on -- the rsync route once shipped 2.1GB of
+  `.pytest_cache`/`.tox`/`.mypy_cache`, and deleting them mid-run killed three tasks by
+  racing the staging tar.
+- **Two things to tell the STalign authors**, both measured and independent of each other:
+  `LDDMM_3D_to_slice` is non-reproducible on CUDA (245um, 29.5% of regions, same node,
+  determinism pinned, no RNG in their source, CPU bit-identical); and its rank-3
+  regularisation energy transforms two of three spatial axes at `STalign.py:1504` -- the line
+  is byte-identical to the rank-2 one at `:1193` where two axes is all of them -- while the
+  gradient it descends smooths all three at `:1527`. Correcting that moves the fitted
+  velocity field by 31x. The paper could not be checked: Nature is behind auth, PMC behind a
+  captcha, bioRxiv 403s.
+
 ## TODO
+
+- [ ] **Attribute the rank-3 per-cell region disagreement, or stop quoting it.** The D11
+  flag experiment (jobs 39758694-97, `merfish-allen3Datlas`, two reps per condition on one
+  pinned node) settled the velocity field: `v` relative L2 goes **1.81 -> 0.055** when
+  squidpy reproduces upstream's two-axis energy, an effect **159x** the run-to-run spread,
+  and squidpy's own reported objective flips from **+3.66%** total drop to **-5.15%**,
+  bit-identical across reps. Both stand.
+
+  What does *not* stand is the region-label claim. With one rep it looked like
+  49.8% -> 18.1%; the second rep came back at 42.2%, so the effect (0.194) is smaller than
+  the spread (0.241). Same for `coord2`: 7.9um then 110.6um. The reason is that every metric
+  measured *against* upstream inherits upstream's CUDA non-reproducibility, which on these
+  notebooks moves cells up to 245um and reassigns 15-22% of regions between two runs of
+  upstream alone (39748939 vs 39756626, same node, determinism pinned). The reference is the
+  thing moving, so a 30-point effect cannot be read from a handful of samples.
+
+  Two routes, and the second is much cheaper than it sounds:
+    1. Many more reps per condition, enough to average upstream's wander down.
+    2. **A deterministic upstream reference.** Upstream's `LDDMM_3D_to_slice` is
+       bit-identical across processes on **CPU** (`A` and `v` to the byte, checked twice) and
+       only wanders on CUDA. Running the upstream pass on CPU makes the reference stand
+       still, at the cost of wall-clock (~104s -> minutes on these notebooks). That turns
+       every rank-3 port-vs-upstream metric from indicative into measured, and it is the
+       prerequisite for any claim about region assignment.
+
+  Until one of those happens, quote `v` and the energy sign flip for D11, and treat the
+  label and depth numbers as unattributed.
 
 - [x] Preserve Python scalar types in `notebook_suite._jax_kwargs`. Every captured
   argument is now cast to the type the port declares for that parameter, so `niter=100`

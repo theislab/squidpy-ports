@@ -37,6 +37,7 @@ from squidpy.experimental.tl import (  # noqa: E402
     Stalign3DResult,
     align_stalign_image,
     align_stalign_obs,
+    align_stalign_volume,
 )
 
 # The estimators stay private on purpose: this module's job is to pin the *kernel* against
@@ -1416,3 +1417,70 @@ def test_divergences_doc_covers_all_xfails():
 
     missing = cited - documented
     assert not missing, f"tests cite ledger rows that do not exist: {sorted(missing)}"
+
+
+def _harness_shaped_volume_fit(fixture, niter=_SLICE_ITERS):
+    """The rank-3 fit exactly as ``notebook_suite._compare_lddmm_3d`` issues it.
+
+    Through the replay's own `as_sdata` / `_initial_affine_xyz` / `solver_keys`, so this fails
+    if any of them drifts. The velocity is frozen the way the generator freezes it
+    (``diffeo_start`` past ``niter``); see :func:`_run_slice` for why that is the only regime
+    where a rank-3 trajectory comparison measures the port rather than ledger row D11.
+    """
+    from squidpy_ports.stalign.notebook_suite import (
+        _IMAGE_KEY,
+        _channels_first,
+        _initial_affine_xyz,
+        as_sdata,
+        solver_keys,
+    )
+
+    reference_axes = [np.asarray(fixture[f"ref_axis_{axis}"]) for axis in range(3)]
+    section_axes = [np.asarray(fixture[f"query_axis_{axis}"]) for axis in range(2)]
+    forwarded = {"niter": niter, "diffeo_start": niter + 1, "sigmaP": 2e1, **_SLICE_PARAMS}
+    return align_stalign_volume(
+        as_sdata(_channels_first(fixture["ref"], ndim=3), reference_axes),
+        as_sdata(_channels_first(fixture["query"], ndim=2), section_axes),
+        image_key=_IMAGE_KEY,
+        initial_affine=_initial_affine_xyz({"L": np.asarray(fixture["start_L"]), "T": np.asarray(fixture["start_T"])}),
+        **{key: value for key, value in forwarded.items() if key in solver_keys()},
+    )
+
+
+def test_replay_volume_call_resolves_the_axes_it_was_given(slice_reference):
+    """The rank-3 half of the question the rank-2 seam answered: are the axes bit-faithful?
+
+    The public entry points take an element's *placement* and rebuild its physical axes from
+    the scale and translation it carries, so a container round-trip sits between the replay
+    and the solver. At rank 2 that round-trip is exact, which is what makes the rank-2 numbers
+    trustworthy. Rank 3 adds a third axis and a section lifted onto ``z = 0``, and the atlas
+    axes carry offsets far larger than their step -- exactly the case
+    :func:`notebook_suite.axis_placement` warns cannot always be recovered by differencing.
+    """
+    fit = _harness_shaped_volume_fit(slice_reference)
+
+    for axis in range(3):
+        expected = np.asarray(slice_reference[f"ref_axis_{axis}"])
+        np.testing.assert_allclose(np.asarray(fit.ref_axes[axis]), expected, rtol=0, atol=1e-9)
+    for axis in range(2):
+        expected = np.asarray(slice_reference[f"query_axis_{axis}"])
+        np.testing.assert_allclose(np.asarray(fit.query_axes[axis]), expected, rtol=0, atol=1e-9)
+
+
+def test_replay_volume_call_reproduces_upstream(slice_reference, record_property):
+    """The rank-3 counterpart of ``test_replay_image_call_reproduces_upstream``.
+
+    Its absence is why this took a day to find at rank 2: every other rank-3 test drives the
+    array-level ``fit_stalign_volume``, so the composition the replay actually performs --
+    containers, placement round-trip, ``(x, y, z)`` affine order, keyword filtering -- was
+    pinned nowhere. Three inverted conventions hid in that gap at rank 2 and cancelled well
+    enough to look like agreement.
+
+    Rank 3 cannot carry rank 2's role swap: the volume is rank 3 and the section rank 2, so
+    the shapes refuse the exchange rather than quietly fitting the inverse. What it *can*
+    carry is a mis-ordered affine or a lossy placement, which is what this measures.
+    """
+    fit = _harness_shaped_volume_fit(slice_reference)
+    error = rel(fit.affine, slice_reference["A"])
+    record_property("rel_error", error)
+    assert error < 1e-10, f"the replay's own rank-3 call disagrees with upstream by {error:.3e}"
