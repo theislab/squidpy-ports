@@ -53,7 +53,12 @@ WORK="$SCRATCH/work"
 # 6 min one. Node-local, never Lustre -- a uv cache is tens of thousands of small files.
 export UV_CACHE_DIR="/localscratch/$RUN_USER/uv-cache"
 export UV_PROJECT_ENVIRONMENT="$SCRATCH/.venv"
-export UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
+# Deliberately NOT `UV_LINK_MODE=copy`, which the comparison launcher sets: there the cache and
+# the venv could land on different mounts, so copying was the safe choice. Here both are under
+# /localscratch, one filesystem, so uv's default hardlink costs nothing -- copy made it write
+# 5.1 GB and turned a seconds-long install into two minutes. `UV_COMPILE_BYTECODE` is left off
+# for the same reason: it byte-compiles all of torch and jax up front to save import time later,
+# and there is no later -- this env is built for one job and deleted with the scratch dir.
 export TMPDIR="$SCRATCH/tmp" MPLCONFIGDIR="$SCRATCH/mpl" XDG_CACHE_HOME="$SCRATCH/xdg"
 mkdir -p "$WORK" "$TMPDIR" "$MPLCONFIGDIR" "$XDG_CACHE_HOME" "$UV_CACHE_DIR" "$OUT"
 trap 'rm -rf "$SCRATCH"' EXIT
