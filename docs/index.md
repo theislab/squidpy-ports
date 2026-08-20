@@ -25,6 +25,6 @@ Source: [theislab/squidpy-ports](https://github.com/theislab/squidpy-ports).
 
 Visual comparison <stalign-comparison.md>
 Notebook values comparison <parity.md>
+Section into a reference volume <notebooks/squidpy-api/starmap-allen3Datlas>
 Numerical tests <correctness.md>
-The rank-3 regulariser <stalign-regularisation.md>
 ```

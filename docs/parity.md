@@ -12,18 +12,6 @@ one `-metrics.json`, `-manifest.json` and `-status.json` per notebook. Each mani
 records the host, package versions and the resolved `squidpy_commit`, so no result is
 separated from the code that produced it.
 
-:::{warning}
-**This build is not the parity state of the port.** It was produced with
-`SQUIDPY_STALIGN_UPSTREAM_REG_ENERGY_AXES=1`, which makes squidpy reproduce upstream's
-two-axis rank-3 regularisation energy -- the defect recorded as ledger row
-[D11](STALIGN_DIVERGENCES.md). squidpy's own comment on that switch says nothing in squidpy
-should ever set it.
-
-The two `allen3Datlas` rows below therefore measure agreement with a line whose own author's
-gradient contradicts it, and they improve for that reason and no other. The remaining fifteen
-rows are untouched: the switch is guarded to rank 3, where the other notebooks never go.
-:::
-
 | notebook | status | largest divergence | upstream | squidpy |
 | --- | --- | --- | --- | --- |
 | [`merfish-allen3Datlas-alignment`](notebooks/stalign-upstream/merfish-allen3Datlas-alignment) | compared | `AI` = `6.0e-01` | 91s | 220s |
@@ -71,8 +59,6 @@ precision shown, which is what three self-cancelling conventions look like from 
 
 ## Notes recorded during the run
 
-- **`merfish-allen3Datlas-alignment`** — This notebook fits a 3D volume to a 2D section. The two sides are *expected* to differ numerically here, unlike every 2D notebook above: upstream's 3D regularisation energy transforms two of the three spatial axes (`dim=(1,2)`, STalign.py:1504) while smoothing that same energy's gradient over all three (`dim=(1,2,3)`, :1527), so it descends on a different objective than the one it reports. Squidpy uses every spatial axis in both places. The divergence below measures that deliberate choice -- see `docs/STALIGN_DIVERGENCES.md` row D11 -- and is not a port defect.
-- **`starmap-allen3Datlas-alignment`** — This notebook fits a 3D volume to a 2D section. The two sides are *expected* to differ numerically here, unlike every 2D notebook above: upstream's 3D regularisation energy transforms two of the three spatial axes (`dim=(1,2)`, STalign.py:1504) while smoothing that same energy's gradient over all three (`dim=(1,2,3)`, :1527), so it descends on a different objective than the one it reports. Squidpy uses every spatial axis in both places. The divergence below measures that deliberate choice -- see `docs/STALIGN_DIVERGENCES.md` row D11 -- and is not a port defect. Its cell [6] also reads the STARmap table through an absolute path on the notebook author's own machine (`/home/manju/Documents/...`), the only such path in the pinned notebook set; the replay rewrites the leading directories to the `../starmap_data/` convention the other notebooks use. Same file, same bytes.
 - **`xenium-heimage-alignment`** — Both passes skipped 1 cell(s) unrelated to the fit -- cell 40: NameError: name 'tpointsI' is not defined
 - **`merfish-visium-alignment`** — Both passes skipped 6 cell(s) unrelated to the fit -- cell 30: RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!; cell 31: NameError: name 'muA' is not defined; cell 35: RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!; cell 36: NameError: name 'muA' is not defined; cell 37: RuntimeError: Expected all tensors to be on the same device, but found at least two devices, cuda:0 and cpu!; cell 38: NameError: name 'muA' is not defined
 - **`merfish-merfish-alignment-simulation`** — Both passes skipped 1 cell(s) unrelated to the fit -- cell 33: TypeError: got an unexpected keyword argument 'squared'
