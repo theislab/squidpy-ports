@@ -83,6 +83,42 @@ thing not in git is the cluster output, which is on Lustre.
 
 ## TODO
 
+- [ ] **Rewrite the remaining sixteen notebooks against the public API.** The template is
+  `docs/notebooks/squidpy-api/starmap-allen3Datlas.ipynb` (pushed, executed on an H100). It
+  shows the shape: no upstream call, no replay harness, `rasterize_points` ->
+  `align_stalign_volume` -> `Stalign3DResult.transform` -> `sample_volume`. What is left:
+
+    - `merfish-allen3Datlas` -- the other rank-3 one, same shape, `dx=10` so no D14 exposure.
+    - the fourteen rank-2 notebooks -- these map onto `align_stalign_image` /
+      `align_stalign_obs`, a different and simpler shape than the volume case. Not attempted.
+    - `merfish-merfish-alignment-affine-only-with-points` -- landmark affine only,
+      `align_landmarks(fit="affine")`.
+
+  **Three things to settle before writing sixteen of them, because each one shapes all of them:**
+
+    1. *What is the reference now.* Upstream is no longer called in the notebooks, so
+       "upstream pass vs squidpy pass" is not the unit any more. The comparison either lives
+       only in `tests/test_stalign_reference.py`, or against committed reference values, or the
+       notebooks stop being a comparison. Not decided.
+    2. *`docs/parity.md` and `docs/stalign-comparison.md` still assume the replay harness* --
+       they are organised around per-cell figure pairing and per-variable metrics keyed off
+       upstream's own variable names. If the notebooks are public-API, both pages collapse into
+       one and most of `notebook_suite.py` (`_namespace_metrics`, `_paired_frames`,
+       `_require_same_cells_ran`, `_compose_pair`) has no caller.
+    3. *Two things have no squidpy equivalent* and would have to be written as notebook code:
+       `plot_brain_regions` (the legend figure), and the `coord0/1/2` naming every current
+       parity metric keys off. `sample_volume` returns integer structure ids; the acronym
+       lookup is a `pandas` map against the Allen ontology CSV.
+
+  Two traps the template already documents, worth carrying into every notebook: `initial_scale`
+  is uniform so it cannot express anisotropy (use `initial_affine`), and an element's `.coords`
+  are pixel indices rather than microns -- reading them as microns turned 425um of depth into
+  140 and the fit silently never recovered.
+
+  Runtime, for planning: the volume notebook is **~11 min on a laptop** and **under 90s** on an
+  H100 through the held-node workflow (`d11run.sh`), with squidpy installed straight from a git
+  rev -- `uv pip install "squidpy @ git+.../squidpy.git@<rev>"`, no rsync.
+
 - [ ] **Run the D13 flag sweep.** `sbatch .claude/run_stalign_d13_flag.sbatch` -- written, never
   submitted. Ledger row D13: both `allen3Datlas` notebooks pass a length-3 `muA`/`muB` against a
   single-channel `J`, upstream sums over the broadcast axis (`STalign.py:1554-1555`) so its
