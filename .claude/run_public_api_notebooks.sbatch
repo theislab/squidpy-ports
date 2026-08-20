@@ -63,7 +63,12 @@ export TMPDIR="$SCRATCH/tmp" MPLCONFIGDIR="$SCRATCH/mpl" XDG_CACHE_HOME="$SCRATC
 mkdir -p "$WORK" "$TMPDIR" "$MPLCONFIGDIR" "$XDG_CACHE_HOME" "$UV_CACHE_DIR" "$OUT"
 trap 'rm -rf "$SCRATCH"' EXIT
 
-export JAX_ENABLE_X64=1 XLA_PYTHON_CLIENT_PREALLOCATE=false MPLBACKEND=agg
+# No MPLBACKEND here, deliberately. `agg` is the right choice for a headless script, and the
+# wrong one inside a kernel: it overrides ipykernel's inline backend, which is the thing that
+# turns a figure into an `image/png` output. Setting it produced two notebooks with every cell
+# green, every number right, and not one of their figures -- 45 kB where the reference is 1.2 MB.
+# Measured on the node: agg -> ['text/plain'], unset -> ['text/plain', 'image/png'].
+export JAX_ENABLE_X64=1 XLA_PYTHON_CLIENT_PREALLOCATE=false
 # Determinism, the half that has to precede library load. Rank 2 reproduces to ~1e-12
 # without it; rank 3 moved cells up to 109 um between two runs of the same code.
 export CUBLAS_WORKSPACE_CONFIG=:4096:8

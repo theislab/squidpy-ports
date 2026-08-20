@@ -164,6 +164,29 @@ thing not in git is the cluster output, which is on Lustre.
   Carried verbatim into the new notebook anyway, with the raster's range printed beside them,
   because changing them would make the fit no longer comparable to the pinned upstream run.
 
+  **Measured on job `39766852` (supergpu26, both notebooks green): `initial_slice` lands the
+  section at `z_axis[slice] / initial_scale`, not at `z_axis[slice]`.**
+
+    | notebook | slice sits at | initialisation lands at | ratio |
+    | --- | --- | --- | --- |
+    | starmap, via `initial_affine`, scale_z 0.9 | 425 um | 472 um | 1/0.9 |
+    | merfish, via `initial_slice` + `initial_scale` 0.9 | 2275 um | 2528 um | 1/0.9 |
+
+  Two datasets, two different API paths, the same exact factor -- so it is the composition, not
+  the data. The affine is the reference->section (backward) map, so where the section actually
+  lands is its inverse, `-R^-1 t = z_axis[slice]/scale`. Either `initial_slice` means something
+  other than "centre the section on this slice", or the translation is composed on the wrong
+  side of the scale. Needs a decision on the squidpy side; until then any notebook asking for
+  slice N gets a section 1/`initial_scale` deeper, which at 0.9 is 11%.
+
+  **And the merfish scale prediction above is confirmed by its own fit.** Objective 378 -> 367
+  over 2000 iterations -- 3% -- with a last-tenth spread of 7 on a mean of 364, and a fitted
+  depth spanning 29 um. That is the initial placement, essentially unrefined: with sigma=2
+  against a target inside [0, 0.83] the three class weights are flat and there is almost no
+  gradient to descend. Compare starmap on the same node and rev: 92151 -> 74071, depth spanning
+  462 um. The regions merfish does assign (DG-mo, MRN, ProS, PAG, SCig, POST, VISp2/3, SUB) are
+  a plausible mid-brain coronal section, so it is not garbage -- it is just where it started.
+
   **Settled while checking this, so nobody re-opens it: the starmap notebook does NOT need
   upstream's `normalize` step.** Upstream normalizes both volumes to `[0, 1]`; the public-API
   notebook does neither and squidpy's `_align` package has no normalisation anywhere. It does
