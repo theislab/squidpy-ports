@@ -826,18 +826,49 @@ def smoke_niter() -> int | None:
     return int(capped) if capped else None
 
 
+def niter_scale() -> float | None:
+    """Iteration multiplier from ``STALIGN_NITER_SCALE``, or ``None`` for the notebook's own.
+
+    Some upstream notebooks stop while their objective is still dropping --
+    `starmap-allen3Datlas-alignment` asks for 800 iterations and its aligned atlas slice sits
+    visibly loose against the section. Comparing two implementations at an iteration cap
+    compares where each ran out of budget as much as where its optimum is, and the port is not
+    line-for-line upstream anyway (see the ledger), so pinning the published cap buys less than
+    it costs.
+
+    Applied to *both* passes, like :func:`smoke_niter`: it changes what is compared, never
+    which side gets what. ``diffeo_start`` scales with it, because it is a phase boundary
+    rather than an absolute step -- stretching the run without moving it would silently give
+    the diffeomorphic phase a different share of the schedule than the notebook intended.
+    """
+    scale = os.environ.get("STALIGN_NITER_SCALE")
+    return float(scale) if scale else None
+
+
 def _capped(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """``kwargs`` with ``niter`` replaced when the smoke gate is on, otherwise unchanged."""
+    """``kwargs`` with ``niter`` rewritten by the smoke gate or the iteration scale.
+
+    The gate wins: it exists to answer one question in a minute, and a scaled-up run is the
+    opposite of that.
+    """
     niter = smoke_niter()
-    if niter is None:
+    if niter is not None:
+        capped = dict(kwargs)
+        capped["niter"] = niter
+        # A diffeomorphic start beyond the cap would leave the velocity field untouched, so the
+        # gate would pass while comparing affines only -- exactly the half that was already fine.
+        if int(capped.get("diffeo_start") or 0) >= niter:
+            capped["diffeo_start"] = 0
+        return capped
+
+    scale = niter_scale()
+    if scale is None or kwargs.get("niter") is None:
         return kwargs
-    capped = dict(kwargs)
-    capped["niter"] = niter
-    # A diffeomorphic start beyond the cap would leave the velocity field untouched, so the
-    # gate would pass while comparing affines only -- exactly the half that was already fine.
-    if int(capped.get("diffeo_start") or 0) >= niter:
-        capped["diffeo_start"] = 0
-    return capped
+    scaled = dict(kwargs)
+    scaled["niter"] = max(1, int(round(int(kwargs["niter"]) * scale)))
+    if kwargs.get("diffeo_start"):
+        scaled["diffeo_start"] = max(0, int(round(int(kwargs["diffeo_start"]) * scale)))
+    return scaled
 
 
 def _completed_kwargs(converted: dict[str, Any], accepted: frozenset[str]) -> dict[str, Any]:

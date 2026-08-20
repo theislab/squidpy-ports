@@ -1267,3 +1267,30 @@ def test_convergence_figure_builds_from_a_trace():
     metrics = _convergence_metrics(SimpleNamespace(energies=trace, n_iter=trace.size))
     fig = _convergence_figure("starmap-allen3Datlas-alignment.ipynb", trace, metrics)
     assert fig.axes and fig.axes[0].get_yscale() == "log"
+
+
+def test_niter_scale_stretches_both_niter_and_the_phase_boundary(monkeypatch):
+    """`diffeo_start` is a share of the schedule, so it has to move with `niter`.
+
+    Scaling one without the other hands the diffeomorphic phase a different fraction of the
+    run than the notebook asked for, which is a silent change to the fit rather than more of
+    the same fit.
+    """
+    from squidpy_ports.stalign.notebook_suite import _capped
+
+    monkeypatch.delenv("STALIGN_SMOKE_NITER", raising=False)
+    monkeypatch.setenv("STALIGN_NITER_SCALE", "4")
+    got = _capped({"niter": 800, "diffeo_start": 100, "epV": 10.0})
+    assert got == {"niter": 3200, "diffeo_start": 400, "epV": 10.0}
+
+    # A notebook that never passes `diffeo_start` must not acquire one.
+    assert _capped({"niter": 2000})["niter"] == 8000
+    assert "diffeo_start" not in _capped({"niter": 2000})
+
+    # The gate outranks the scale: one question, one minute.
+    monkeypatch.setenv("STALIGN_SMOKE_NITER", "1")
+    assert _capped({"niter": 800, "diffeo_start": 100})["niter"] == 1
+
+    monkeypatch.delenv("STALIGN_SMOKE_NITER")
+    monkeypatch.delenv("STALIGN_NITER_SCALE")
+    assert _capped({"niter": 800}) == {"niter": 800}
