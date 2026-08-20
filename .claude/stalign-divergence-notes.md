@@ -146,6 +146,37 @@ thing not in git is the cluster output, which is on Lustre.
   same role `landmark_yx` plays in the starmap notebook. `muA=[3,3,3]` / `muB=[0,0,0]` against a
   single-channel target is ledger row D13: pass `muA=[3.0]`, `muB=[0.0]`.
 
+  **Measured, and worth a ledger row of its own: upstream's merfish solver values are in the
+  wrong scale for the raster its own notebook builds.** `sigmaM/sigmaA/sigmaB` and `muA/muB` are
+  in the *target's* intensity units. Rasterized on supergpu26 with the pinned upstream
+  `STalign.rasterize`:
+
+    | raster | range | mean |
+    | --- | --- | --- |
+    | merfish `dx=10, blur=1` (what the notebook runs) | 0 - 0.85 | 0.113 |
+    | merfish `dx=50, blur=1` | 0 - 13.1 | 2.81 |
+    | starmap `dx=50, blur=1` | 0 - 1.017 | 0.101 |
+
+  With `sigma=2` and `muA=3` against a target that never exceeds 0.85, all three class weights
+  go flat and the artifact/background/matching split does nothing. Those numbers are in scale
+  for a `dx=50` raster, not the `dx=10` the notebook uses. Independent of D13, and it compounds
+  it -- D13's `sigma/sqrt(3)` correction is a factor 1.7 on a parameter already off by ~15.
+  Carried verbatim into the new notebook anyway, with the raster's range printed beside them,
+  because changing them would make the fit no longer comparable to the pinned upstream run.
+
+  **Settled while checking this, so nobody re-opens it: the starmap notebook does NOT need
+  upstream's `normalize` step.** Upstream normalizes both volumes to `[0, 1]`; the public-API
+  notebook does neither and squidpy's `_align` package has no normalisation anywhere. It does
+  not matter. `LDDMM_3D_to_slice` regresses the deformed atlas onto the target before the
+  matching term (`B = [1; AI]`, `coeffs = solve(BB + 0.1*I, BJ)`, `fAI = B.T @ coeffs`,
+  `STalign.py:1494-1499`), so any affine rescale of `I` is absorbed by `coeffs`; the only
+  scale-sensitive part is the fixed ridge `small = 0.1`, negligible against `BB ~ 2.7e12`
+  unnormalized and `~3.6e3` normalized. And the starmap raster already lands in `[0, 1.017]`,
+  so normalising `J` is a 1.7% rescale. squidpy's volume step sizes are upstream's own defaults
+  (`epL 1e-6, epT 1e1, epV 1e3, expand 1.25, sigmaR 1e8`), which that notebook does not
+  override. The oscillation in its energy tail is the fit still moving at its iteration cap,
+  not a preprocessing bug.
+
   **The cluster job for these is `.claude/run_public_api_notebooks.sbatch`** -- neither checkout is
   staged, so there is no rsync and no tar. Both stay on Lustre and are read once; the venv, the uv
   cache and the notebooks' working directory are on `/localscratch`, and the datasets are

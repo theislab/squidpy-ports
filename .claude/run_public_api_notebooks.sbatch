@@ -69,7 +69,14 @@ export OMP_NUM_THREADS="$SLURM_CPUS_PER_TASK" MKL_NUM_THREADS="$SLURM_CPUS_PER_T
 export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SQUIDPY=1.8.3.dev0
 
 echo "### host=$(hostname) job=$SLURM_JOB_ID started=$(date --iso-8601=seconds)"
-echo "### ports=$PORTS @ $(git -C "$PORTS" rev-parse --short HEAD 2>/dev/null || echo '?')"
+
+# The whole reason the ports source is a clone rather than an rsynced tree: new notebooks
+# arrive by fetching them. Done here, in the job, so the log records the exact SHA that ran
+# rather than whatever the directory happened to be left at. Pin a rev with
+# `PORTS_REV=<sha> sbatch --export=ALL,PORTS_REV` when reproducing an older result.
+git -C "$PORTS" fetch --quiet origin
+git -C "$PORTS" checkout --quiet --detach "${PORTS_REV:-origin/main}"
+echo "### ports=$PORTS @ $(git -C "$PORTS" rev-parse HEAD)"
 echo "### squidpy=$SQUIDPY @ $(git -C "$SQUIDPY" rev-parse --short HEAD 2>/dev/null || echo '?')"
 echo "### scratch=$SCRATCH out=$OUT"
 echo "### uv_cache=$UV_CACHE_DIR size=$(du -sh "$UV_CACHE_DIR" 2>/dev/null | cut -f1)"
