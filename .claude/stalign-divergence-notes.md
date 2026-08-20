@@ -119,6 +119,42 @@ thing not in git is the cluster output, which is on Lustre.
   H100 through the held-node workflow (`d11run.sh`), with squidpy installed straight from a git
   rev -- `uv pip install "squidpy @ git+.../squidpy.git@<rev>"`, no rsync.
 
+  **Proposed set: four new notebooks, not sixteen.** The ten points-to-points notebooks differ
+  only in which CSV they read and their initial rotation/scale -- as public API that is three
+  lines each, and sixteen documents of three lines is not sixteen documents' worth of
+  information. One notebook per *shape*, with a table of the per-dataset arguments:
+
+    | new notebook | API path | covers |
+    | --- | --- | --- |
+    | `starmap-allen3Datlas` (written) | `rasterize_points` -> `align_stalign_volume` -> `transform` -> `sample_volume` | 1 |
+    | `merfish-allen3Datlas` | same, `dx=10`, `slice=177`, uniform `initial_scale=0.9` so no `initial_affine` needed | 1 |
+    | `merfish-merfish` | `align_stalign_obs` | 10 -- merfish-merfish x4, merfish-xenium, xenium-xenium, xenium-starmap, visium-visium-affine-only, heart x2 |
+    | `merfish-visium` | `rasterize_points` + `align_stalign_image`, with landmarks | 4 -- merfish-visium x3, xenium-heimage |
+    | `merfish-merfish-landmarks` | `align_landmarks(fit="affine")` | 1 |
+
+  That is 5 notebooks for all 17, and it answers the first open question above by default: **the
+  notebooks stop being a comparison.** Parity stays where it already runs -- the replay sweep
+  (`run_stalign_comparisons.sbatch` -> `notebook_suite`) and `tests/test_stalign_reference.py` --
+  so `_namespace_metrics`, `_paired_frames`, `_require_same_cells_ran` and `_compose_pair` keep
+  their caller and nothing gets deleted. `docs/stalign-comparison.md` folds into `docs/parity.md`;
+  the public-API notebooks become their own section, documentation rather than evidence.
+
+  Fit arguments recovered from the pinned upstream `merfish-allen3Datlas`, for whoever writes it:
+  `dx=10, blur=1, slice=177, theta_deg=0, scale=0.9` on all three axes, `nt=4, niter=2000,
+  a=500.0` (upstream default), `sigmaA=sigmaB=sigmaM=2`. Its single landmark pair is
+  `points_atlas=[[0, 2580]]` / `points_target=[[8, 2533]]`, so `Ti = (8, -47)` in `(y, x)` -- the
+  same role `landmark_yx` plays in the starmap notebook. `muA=[3,3,3]` / `muB=[0,0,0]` against a
+  single-channel target is ledger row D13: pass `muA=[3.0]`, `muB=[0.0]`.
+
+  **The cluster job for these is `.claude/run_public_api_notebooks.sbatch`** -- neither checkout is
+  staged, so there is no rsync and no tar. Both stay on Lustre and are read once; the venv, the uv
+  cache and the notebooks' working directory are on `/localscratch`, and the datasets are
+  symlinked into it rather than copied. The environment is the committed `pyproject.toml` +
+  `uv.lock` via `uv sync --frozen --project <clone>`, plus two notebook-only pins made in the
+  script itself (squidpy from `squidpy-clone` at `2bff194f`, and `jax[cuda12]`) because squidpy is
+  a git rev rather than a released version. Ports source is `stalign-3d/ports-clone`, a real git
+  clone: `git fetch && git checkout` picks up new notebooks, which is what replaces the rsync.
+
 - [ ] **Run the D13 flag sweep.** `sbatch .claude/run_stalign_d13_flag.sbatch` -- written, never
   submitted. Ledger row D13: both `allen3Datlas` notebooks pass a length-3 `muA`/`muB` against a
   single-channel `J`, upstream sums over the broadcast axis (`STalign.py:1554-1555`) so its
