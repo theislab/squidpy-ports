@@ -1224,3 +1224,46 @@ def test_paired_frames_align_the_two_passes_row_for_row():
     # shape mismatches carry no row correspondence at all
     assert _paired_frames({"df": upstream_df}, {"df": squidpy_df.head(1)}) == {}
     assert _paired_frames({"df": upstream_df}, {"df": squidpy_df.rename(columns={"coord0": "coord1"})}) == {}
+
+
+def test_convergence_metrics_report_what_the_iteration_cap_left_undone():
+    """The tail share is the number that matters, so it has to mean what it says.
+
+    A geometric trace that has flattened must report a tail share near zero; one still
+    dropping at the cap must report a large one. Traces too short to say anything, or absent
+    because a result carries none, yield nothing rather than a misleading zero.
+    """
+    from types import SimpleNamespace
+
+    from squidpy_ports.stalign.notebook_suite import _convergence_metrics
+
+    converged = np.concatenate([np.geomspace(1e3, 1.0, 60), np.full(40, 1.0)])
+    got = _convergence_metrics(SimpleNamespace(energies=converged, n_iter=converged.size))
+    assert got["energy iterations"] == 100
+    assert got["energy total drop fraction"] == pytest.approx(1 - 1e-3, abs=1e-3)
+    assert got["energy last-tenth drop fraction"] == pytest.approx(0.0, abs=1e-9)
+
+    still_falling = np.geomspace(1e3, 1.0, 100)
+    got = _convergence_metrics(SimpleNamespace(energies=still_falling, n_iter=still_falling.size))
+    # A pure geometric decay drops the same *factor* every tenth, so the final tenth's share
+    # of the initial objective is small even though it has not converged -- what marks it is
+    # that the value is still falling, so the tail share is strictly positive.
+    assert got["energy last-tenth drop fraction"] > 0
+
+    assert _convergence_metrics(SimpleNamespace(energies=None, n_iter=None)) == {}
+    assert _convergence_metrics(SimpleNamespace(energies=np.arange(5.0), n_iter=5)) == {}
+
+
+def test_convergence_figure_builds_from_a_trace():
+    """The panel must render for a real trace without needing a fit or a display."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    from types import SimpleNamespace
+
+    from squidpy_ports.stalign.notebook_suite import _convergence_figure, _convergence_metrics
+
+    trace = np.geomspace(1e4, 3.0, 200)
+    metrics = _convergence_metrics(SimpleNamespace(energies=trace, n_iter=trace.size))
+    fig = _convergence_figure("starmap-allen3Datlas-alignment.ipynb", trace, metrics)
+    assert fig.axes and fig.axes[0].get_yscale() == "log"

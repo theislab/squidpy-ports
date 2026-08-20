@@ -1004,6 +1004,87 @@ def _torch_fit(result: dict[str, Any]) -> _FitResult:
     )
 
 
+def _convergence_metrics(fit: Any) -> dict[str, float]:
+    """How much descending the fit had left to do when its iteration cap stopped it.
+
+    A divergence only means something once both sides have converged; a fit still dropping
+    its objective at the last iteration is reporting where it ran out of iterations, not
+    where the optimum is. `starmap-allen3Datlas-alignment` asks for `niter=800` and its
+    aligned atlas slice looks visibly loose against the section, which is the question this
+    answers with a number instead of an eye.
+
+    ``energies``/``n_iter`` are fields of the public result, so nothing here reaches into
+    squidpy's internals. Upstream keeps its own trace local -- ``Esave`` is plotted and never
+    returned -- so there is no upstream column to compare against; the ledger's rank-3 row
+    pins the port's objective to the original's at 4e-16 across the whole trace, which is
+    what makes the port's trace usable as a stand-in.
+    """
+    if getattr(fit, "energies", None) is None or getattr(fit, "n_iter", None) is None:
+        return {}
+    energies = np.asarray(fit.energies, dtype=float)[: int(fit.n_iter)]
+    energies = energies[np.isfinite(energies)]
+    if energies.size < 20:
+        return {}
+    tail = max(1, energies.size // 10)
+    scale = max(abs(float(energies[0])), np.finfo(float).tiny)
+    return {
+        "energy first": float(energies[0]),
+        "energy last": float(energies[-1]),
+        # Total progress, and how much of it was still arriving in the final tenth. A tail
+        # share near zero is converged; comparable to the total means the cap bound the fit.
+        "energy total drop fraction": float((energies[0] - energies[-1]) / scale),
+        "energy last-tenth drop fraction": float((energies[-tail] - energies[-1]) / scale),
+        "energy iterations": float(energies.size),
+    }
+
+
+def _convergence_figure(notebook: str, energies: Any, metrics: Mapping[str, float]) -> Any:
+    """The port's objective per iteration, as a panel the notebook carries with its results.
+
+    Reading a divergence without this is guesswork: a curve still dropping at the right-hand
+    edge says the iteration cap stopped the fit, and any disagreement downstream is partly a
+    disagreement about where two runs happened to stop. `starmap-allen3Datlas-alignment`
+    prompted it -- `niter=800`, and an aligned atlas slice that sits visibly loose against the
+    section.
+
+    One curve, not two. Upstream computes the same trace but keeps it local (``Esave``, which
+    it plots and does not return), so there is no second series to draw; the ledger's rank-3
+    row pins the two objectives to 4e-16 across the whole trace, which is what lets one curve
+    stand for both. Log-scaled because the drop is orders of magnitude, and annotated with the
+    share of the total descent that arrived in the final tenth.
+    """
+    import matplotlib.pyplot as plt
+
+    trace = np.asarray(energies, dtype=float)
+    trace = trace[np.isfinite(trace)]
+    fig, ax = plt.subplots(figsize=(9, 4), constrained_layout=True)
+    ax.plot(np.arange(1, trace.size + 1), trace, lw=1.2)
+    ax.set_yscale("log" if np.all(trace > 0) else "linear")
+    ax.set_xlabel("iteration")
+    ax.set_ylabel("objective (squidpy)")
+    tail = metrics.get("energy last-tenth drop fraction")
+    total = metrics.get("energy total drop fraction")
+    caption = f"{notebook} — {trace.size} iterations"
+    if tail is not None and total is not None:
+        caption += f", total drop {total:.1%} of the initial objective, final tenth {tail:.2%}"
+    ax.set_title(caption, fontsize=10)
+    return fig
+
+
+def _append_convergence_panel(result: ComparisonResult, metrics: Mapping[str, float], traces: list[Any]) -> None:
+    """Add the convergence panel to a completed comparison, if the fit reported a trace.
+
+    Appended rather than paired: `figures` normally holds upstream-beside-port composites, and
+    this is one curve because only one side returns its trace. `figure_sources` gets an empty
+    entry so the written notebook keeps its cells and figures in step.
+    """
+    trace = next((t for t in traces if t is not None), None)
+    if trace is None or not metrics:
+        return
+    result.figures.append(_convergence_figure(result.notebook, trace, metrics))
+    result.figure_sources.append("")
+
+
 def _pin_fit_determinism() -> None:
     """Ask both backends for deterministic kernels before either fit runs.
 
@@ -1073,6 +1154,8 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
     device = _fit_device()
     torch.set_default_dtype(torch.float64)
     _pin_fit_determinism()
+    convergence: dict[str, float] = {}
+    traces: list[Any] = []
 
     def upstream_fit(args: tuple[Any, ...], kwargs: dict[str, Any], original: Any) -> Any:
         _capture_fit_arguments(notebook, args, kwargs)
@@ -1114,9 +1197,14 @@ def _compare_lddmm(notebook: str) -> ComparisonResult:
             **_completed_kwargs(converted, accepted - {"initial_affine"}),
         )
         jax.block_until_ready(fit.affine)
+        convergence.update(_convergence_metrics(fit))
+        traces.append(getattr(fit, "energies", None))
         return _torch_fit(_result_dict(fit))
 
-    return _pair_passes(notebook, upstream_fit, squidpy_fit)
+    result = _pair_passes(notebook, upstream_fit, squidpy_fit)
+    result.metrics.update(convergence)
+    _append_convergence_panel(result, convergence, traces)
+    return result
 
 
 #: Where a notebook writes its aligned coordinates, from its own ``to_csv`` call.
@@ -1368,6 +1456,8 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
     device = _fit_device()
     torch.set_default_dtype(torch.float64)
     _pin_fit_determinism()
+    convergence: dict[str, float] = {}
+    traces: list[Any] = []
     _REGION_COLOURS.clear()  # per notebook, so one notebook's regions cannot colour another's
     _patch_atlas_downloads(upstream.load())
     _patch_region_colours(upstream.load())
@@ -1412,9 +1502,14 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
             **{key: value for key, value in forwarded.items() if key in solver_keys()},
         )
         jax.block_until_ready(fit.affine)
+        convergence.update(_convergence_metrics(fit))
+        traces.append(getattr(fit, "energies", None))
         return _torch_slice_fit(fit, section_axes)
 
-    return _pair_passes(notebook, upstream_fit, squidpy_fit, function="LDDMM_3D_to_slice")
+    result = _pair_passes(notebook, upstream_fit, squidpy_fit, function="LDDMM_3D_to_slice")
+    result.metrics.update(convergence)
+    _append_convergence_panel(result, convergence, traces)
+    return result
 
 
 def _initial_affine_xyz(kwargs: dict[str, Any]) -> np.ndarray | None:
