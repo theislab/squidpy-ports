@@ -1,5 +1,6 @@
 {
-  "host": "supergpu20.scidom.de",
+  "d11_upstream_reg_energy_axes": true,
+  "host": "supergpu26.scidom.de",
   "note": "This notebook fits a 3D volume to a 2D section. The two sides are *expected* to differ numerically here, unlike every 2D notebook above: upstream's 3D regularisation energy transforms two of the three spatial axes (`dim=(1,2)`, STalign.py:1504) while smoothing that same energy's gradient over all three (`dim=(1,2,3)`, :1527), so it descends on a different objective than the one it reports. Squidpy uses every spatial axis in both places. The divergence below measures that deliberate choice -- see `docs/STALIGN_DIVERGENCES.md` row D11 -- and is not a port defect. Its cell [6] also reads the STARmap table through an absolute path on the notebook author's own machine (`/home/manju/Documents/...`), the only such path in the pinned notebook set; the replay rewrites the leading directories to the `../starmap_data/` convention the other notebooks use. Same file, same bytes.",
   "notebook": "starmap-allen3Datlas-alignment.ipynb",
   "packages": {
@@ -9,11 +10,12 @@
     "squidpy-ports": "0.0.1",
     "torch": "2.13.0"
   },
+  "provenance_caveat": "squidpy_commit is unresolved: this ran against an rsynced squidpy tree (squidpy-regaxes) with no git metadata.",
   "python": "3.13.14",
-  "slurm_job_id": "39759299",
-  "squidpy_commit": "2bff194fc5fa9ff3fe41816af14f745609c8bada",
-  "squidpy_seconds": 85.56033313198714,
+  "slurm_job_id": "39766852",
+  "squidpy_commit": null,
+  "squidpy_seconds": 83.3729939800105,
   "status": "compared",
-  "upstream_seconds": 41.68476333201397,
+  "upstream_seconds": 37.70690289000049,
   "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }

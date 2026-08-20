@@ -1294,3 +1294,210 @@ def test_niter_scale_stretches_both_niter_and_the_phase_boundary(monkeypatch):
     monkeypatch.delenv("STALIGN_SMOKE_NITER")
     monkeypatch.delenv("STALIGN_NITER_SCALE")
     assert _capped({"niter": 800}) == {"niter": 800}
+
+
+def test_d13_flag_collapses_upstream_mixture_means_by_the_same_rule(monkeypatch):
+    """The flag has to change which side gets what -- that is the whole experiment.
+
+    Every other env gate in this harness (`STALIGN_SMOKE_NITER`, `STALIGN_NITER_SCALE`)
+    deliberately applies to both passes so it can never advantage one. `STALIGN_D13_COLLAPSE_MEANS`
+    is the exception, and the reason it is safe is that it makes the two sides *agree*: it
+    collapses upstream's fixed mean by the same `_collapsed_mean` the port's side already uses.
+    If those two ever stop being the same call, a "collapsed" run is comparing two different
+    collapses and the measured effect is meaningless.
+    """
+    from squidpy_ports.stalign.notebook_suite import (
+        _collapsed_mean,
+        _section_channels,
+        collapse_upstream_mixture_means,
+    )
+
+    monkeypatch.delenv("STALIGN_D13_COLLAPSE_MEANS", raising=False)
+    assert not collapse_upstream_mixture_means(), "a published sweep must never collapse upstream"
+    monkeypatch.setenv("STALIGN_D13_COLLAPSE_MEANS", "0")
+    assert not collapse_upstream_mixture_means(), "0 is off, so a launcher can set it either way"
+    monkeypatch.setenv("STALIGN_D13_COLLAPSE_MEANS", "1")
+    assert collapse_upstream_mixture_means()
+
+    # Both `allen3Datlas` notebooks: a length-3 mean against `J = W[None]`, one channel.
+    section = np.zeros((1, 12, 15))
+    assert _section_channels(section) == 1
+    assert _section_channels(torch.as_tensor(section)) == 1
+    np.testing.assert_allclose(_collapsed_mean(torch.tensor([0.7, 0.7, 0.7]), 1), [0.7])
+    np.testing.assert_allclose(_collapsed_mean(np.array([3.0, 3.0, 3.0]), 1), [3.0])
+
+    # A three-channel section -- `xenium-heimage`'s H&E -- keeps all three, so the flag is
+    # inert wherever upstream's length was right to begin with.
+    assert _section_channels(np.zeros((3, 12, 15))) == 3
+    np.testing.assert_allclose(_collapsed_mean(np.array([0.7, 0.8, 0.9]), 3), [0.7, 0.8, 0.9])
+
+
+def test_flag_report_refuses_an_effect_below_the_replicate_spread(tmp_path):
+    """The verdict column, checked against D11's two real outcomes -- one read, one refused.
+
+    D11's velocity effect survived (`v` relL2 1.81 -> 0.055, quoted as 159x the run-to-run
+    spread) and its region-label effect did not (49.8% -> 18.1% on one replicate, 42.2% on the
+    second, so effect 0.194 against spread 0.241). Both are reproduced here, because a reporter
+    that cannot tell those two apart is the reason the label number had to be withdrawn.
+    """
+    import importlib.util
+
+    module = Path("src/squidpy_ports/stalign/flag_report.py").resolve()
+    spec = importlib.util.spec_from_file_location("flag_report", module)
+    flag_report = importlib.util.module_from_spec(spec)
+    # Loaded by path on purpose: the batch script runs it this way after its environment is
+    # gone, so importing the package -- and therefore needing it installed -- must not be
+    # required. This fails if `flag_report` ever grows a non-stdlib import.
+    spec.loader.exec_module(flag_report)
+
+    effect, spread = flag_report.effect_and_spread([1.805, 1.816], [0.055, 0.055])
+    assert effect / spread == pytest.approx(159.6, abs=0.1)
+    assert flag_report.verdict(effect, spread).startswith("measured")
+
+    effect, spread = flag_report.effect_and_spread([0.498, 0.494], [0.181, 0.422])
+    assert effect == pytest.approx(0.1945)
+    assert spread == pytest.approx(0.241)
+    assert "BELOW SPREAD" in flag_report.verdict(effect, spread)
+
+    for condition, value in (("baseline", 0.93), ("collapsed", 0.11)):
+        for replicate in (1, 2):
+            run = tmp_path / f"{condition}-rep{replicate}"
+            run.mkdir()
+            (run / "starmap-allen3Datlas-alignment-metrics.json").write_text(
+                json.dumps({"v relative L2": value, "A relative L2": 0.011, "status": "compared"})
+            )
+    runs = flag_report.read_runs(tmp_path)
+    assert sorted(runs["starmap-allen3Datlas-alignment"]) == ["baseline", "collapsed"]
+    table = flag_report.report(runs, "baseline", "collapsed")
+    # Worst-first, and the non-numeric `status` is not a metric.
+    assert table.index("`v relative L2`") < table.index("`A relative L2`")
+    assert "status" not in table
+    # A condition that never ran is named rather than averaged over.
+    assert "Incomplete: no `nope` run." in flag_report.report(runs, "baseline", "nope")
+
+
+def test_corrected_cell_coords_reads_the_grid_it_was_built_on(monkeypatch):
+    """Ledger D14: the corrected readout must use `/res`, and must not trust `x`/`y`.
+
+    Two things are pinned. First the index arithmetic: upstream builds `tform` on a 10 micron
+    grid and then reads it at `/dx`, which with the notebooks' `dx=50` addresses a fifth of
+    each axis; the correction has to divide by `res`. Second the source of the cell positions:
+    cell [41] of both volume-to-section notebooks rebinds `x` and `y` to `df['coord0']` and
+    `-df['coord1']`, so a correction that reads the namespace's `x`/`y` silently scores the
+    previous cell's output against itself. Here those names hold deliberate garbage.
+    """
+    import pandas as pd
+
+    from squidpy_ports.stalign import notebook_suite as ns
+
+    res, dx = 10.0, 50.0
+    row_axis = np.arange(0.0, 400.0, dx)
+    col_axis = np.arange(0.0, 600.0, dx)
+
+    # A stub transform whose value at a cell IS that cell's index, so the assertion below is
+    # about which cells were addressed and nothing else.
+    seen: dict[str, Any] = {}
+
+    class _Stub:
+        @staticmethod
+        def build_transform3D(xv_in, cpu_v, cpu_A, direction, XJ):
+            # Every input must arrive on one device, CPU: `interp3D` subtracts `xv[i][0]`
+            # from a grid derived from `XJ`, so a mixed set raises from inside upstream. A stub
+            # cannot see CUDA, but it can pin that all four were coerced rather than forwarded.
+            # Two things must hold. Every argument arrives on one device, AND the call sits
+            # inside a CPU default-device context -- upstream re-wraps three of its four
+            # arguments in `torch.tensor(...)`, which follows the ambient default rather than
+            # the argument. A laptop has no CUDA, so this assertion is a guard here and only
+            # bites on a GPU node; it is still what the three failed cluster runs needed.
+            seen["ambient"] = torch.empty(1).device
+            seen["devices"] = {XJ.device, cpu_v.device, cpu_A.device} | {a.device for a in xv_in}
+            shape = XJ.shape
+            out = torch.zeros(shape, dtype=torch.float64)
+            rows = torch.arange(shape[1], dtype=torch.float64)[:, None]
+            cols = torch.arange(shape[2], dtype=torch.float64)[None, :]
+            out[0, :, :, 0] = rows
+            out[0, :, :, 1] = cols
+            return out
+
+    monkeypatch.setattr(ns.upstream, "load", lambda: _Stub())
+
+    cells_x = np.array([0.0, 100.0, 250.0, 550.0])
+    cells_y = np.array([0.0, 50.0, 200.0, 350.0])
+    frame = pd.DataFrame({"x": cells_x, "y": cells_y, "coord0": np.zeros(4)})
+    namespace = {
+        "df": frame,
+        "xv": [np.arange(3.0)] * 3,
+        "v": np.zeros((2, 3, 3, 3, 3)),
+        "A": np.eye(4),
+        "xJ": [row_axis, col_axis],
+        # What cell [41] leaves behind: `x`/`y` are no longer cell positions.
+        "x": frame["coord0"].to_numpy(),
+        "y": -frame["coord0"].to_numpy(),
+    }
+
+    namespace["A"] = torch.eye(4, dtype=torch.float64)
+    got = ns._corrected_cell_coords(namespace)
+    assert got is not None
+    assert seen["devices"] == {torch.device("cpu")}, "every input must be coerced to one device"
+    assert seen["ambient"] == torch.device("cpu"), (
+        "the call must run inside a CPU default-device context, or upstream's own "
+        "`torch.tensor(...)` calls land elsewhere than its arguments"
+    )
+    # `/res`, not `/dx`: a 250um cell sits at column 25 on the 10um grid, not column 5.
+    assert got[2, 1] == 25.0, "column index must come from /res=10, not /dx=50"
+    # Upstream builds the grid with `arange(start, stop, res)`, an *exclusive* stop, so a cell
+    # sitting exactly on the last axis sample has no cell of its own -- upstream's own comment
+    # concedes "there may be points out of bounds". Those clamp to the edge rather than raising,
+    # so one cell on the boundary cannot cost the whole metric.
+    n_rows = len(np.arange(row_axis[0], row_axis[-1], res))
+    n_cols = len(np.arange(col_axis[0], col_axis[-1], res))
+    np.testing.assert_allclose(got[:, 0], np.minimum(np.round(cells_y / res), n_rows - 1))
+    np.testing.assert_allclose(got[:, 1], np.minimum(np.round(cells_x / res), n_cols - 1))
+    assert got[3, 0] == n_rows - 1, "a cell on the exclusive endpoint must clamp, not raise"
+
+    # The guards: anything missing, or a frame without positions, yields nothing rather than
+    # a wrong number. Fifteen of the seventeen notebooks take this path.
+    assert ns._corrected_cell_coords({"df": frame}) is None
+    assert ns._corrected_cell_coords({**namespace, "df": frame.drop(columns=["x"])}) is None
+    assert ns._corrected_coord_metrics({}, {}) == {}
+    paired = ns._corrected_coord_metrics(namespace, namespace)
+    assert set(paired) == {f"df[coord{axis}] corrected median abs delta" for axis in range(3)}
+    assert all(value == 0.0 for value in paired.values()), "a namespace against itself must score 0"
+
+
+def test_slice_forwarding_prefers_the_notebook_over_upstreams_defaults(monkeypatch):
+    """Rank 3 must fill omissions from *upstream*, not from squidpy's own volume defaults.
+
+    The rank-2 path has always done this through `_completed_kwargs`, for the reason
+    `upstream_solver_defaults` records: `align_stalign_image` resolves squidpy's own image
+    defaults, and letting them apply would run the port on a different fit from upstream and
+    publish the gap as a port divergence. Rank 3 had no equivalent -- it forwarded only what
+    the notebook passed -- which was harmless for exactly as long as `_VOLUME_DEFAULTS` matched
+    upstream's, and stopped being harmless when squidpy retuned `sigmaR` to 1e6 for rank 3.
+    """
+    from squidpy_ports.stalign import notebook_suite as ns
+
+    monkeypatch.setattr(
+        ns,
+        "upstream_slice_defaults",
+        lambda: {"sigmaR": 1e8, "a": 500.0, "nt": 3, "niter": 5000, "device": "cpu", "sigmaP": 2e1},
+    )
+    monkeypatch.delenv("STALIGN_SMOKE_NITER", raising=False)
+    monkeypatch.delenv("STALIGN_NITER_SCALE", raising=False)
+
+    forwarded = ns._slice_forwarded({"a": 250.0, "nt": 4, "niter": 800})
+    # The notebook wins where it speaks.
+    assert forwarded["a"] == 250.0
+    assert forwarded["nt"] == 4
+    assert forwarded["niter"] == 800
+    # Upstream fills the silence -- 1e8, never squidpy's retuned 1e6.
+    assert forwarded["sigmaR"] == 1e8, "a silent `sigmaR` must come from upstream, not `_VOLUME_DEFAULTS`"
+    # `_SLICE_DROPPED` still drops: upstream's 3D loop has no point term at all, so carrying
+    # `sigmaP` would advertise a knob that does nothing.
+    assert "sigmaP" not in forwarded
+    assert "device" not in forwarded
+
+    # Types survive the fill, so `jax.jit` can still hash the static arguments.
+    assert isinstance(forwarded["niter"], int)
+    assert isinstance(forwarded["nt"], int)
+    assert isinstance(forwarded["sigmaR"], float)

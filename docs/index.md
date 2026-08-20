@@ -26,5 +26,5 @@ Source: [theislab/squidpy-ports](https://github.com/theislab/squidpy-ports).
 Visual comparison <stalign-comparison.md>
 Notebook values comparison <parity.md>
 Numerical tests <correctness.md>
-Divergence ledger <STALIGN_DIVERGENCES.md>
+The rank-3 regulariser <stalign-regularisation.md>
 ```

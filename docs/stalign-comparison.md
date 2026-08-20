@@ -108,27 +108,3 @@ port against upstream at the primitive, energy, gradient, trajectory, converged 
 the velocity field matches to ~1e-15, and the ~1e-3 figures above come from rasterisation at the
 boundaries, not from the fit. Every test, what it asserts, and whether it passes is on
 [Numerical tests](correctness.md).
-
-## Reproducing every panel
-
-Everything on this page is reproducible from one container — no environment tricks. It
-pins the fork, upstream STalign, and the datasets, and stamps the exact fork commit into each run's
-manifest. See [`container/README.md`](https://github.com/theislab/squidpy-ports/blob/main/container/README.md):
-
-```bash
-apptainer build container/stalign.sif container/stalign.def
-apptainer run --nv --writable-tmpfs --bind ./out:/output \
-    container/stalign.sif stalign-xenium-comparison.ipynb
-```
-
-Each run writes the executed notebook, its panel, and a `*-manifest.json` recording package versions
-and `squidpy_commit` — so a result is never separated from the code that produced it.
-
-```{toctree}
-:hidden: true
-:maxdepth: 1
-
-Xenium ↔ Xenium <notebooks/stalign-xenium-comparison>
-MERFISH ↔ MERFISH <notebooks/stalign-merfish-comparison>
-Visium ↔ Visium (affine) <notebooks/stalign-visium-affine-comparison>
-```

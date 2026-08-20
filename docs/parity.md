@@ -12,11 +12,24 @@ one `-metrics.json`, `-manifest.json` and `-status.json` per notebook. Each mani
 records the host, package versions and the resolved `squidpy_commit`, so no result is
 separated from the code that produced it.
 
+:::{warning}
+**This build is not the parity state of the port.** It was produced with
+`SQUIDPY_STALIGN_UPSTREAM_REG_ENERGY_AXES=1`, which makes squidpy reproduce upstream's
+two-axis rank-3 regularisation energy -- the defect recorded as ledger row
+[D11](STALIGN_DIVERGENCES.md). squidpy's own comment on that switch says nothing in squidpy
+should ever set it.
+
+The two `allen3Datlas` rows below therefore measure agreement with a line whose own author's
+gradient contradicts it, and they improve for that reason and no other. The remaining fifteen
+rows are untouched: the switch is guarded to rank 3, where the other notebooks never go.
+:::
+
 | notebook | status | largest divergence | upstream | squidpy |
 | --- | --- | --- | --- | --- |
-| [`merfish-allen3Datlas-alignment`](notebooks/stalign-upstream/merfish-allen3Datlas-alignment) | compared | `v` = `1.8e+00` | 91s | 220s |
-| [`starmap-allen3Datlas-alignment`](notebooks/stalign-upstream/starmap-allen3Datlas-alignment) | compared | `v` = `9.3e-01` | 42s | 86s |
+| [`merfish-allen3Datlas-alignment`](notebooks/stalign-upstream/merfish-allen3Datlas-alignment) | compared | `AI` = `6.0e-01` | 91s | 220s |
+| [`starmap-allen3Datlas-alignment`](notebooks/stalign-upstream/starmap-allen3Datlas-alignment) | compared | `AI` = `3.1e-01` | 42s | 86s |
 | [`xenium-heimage-alignment`](notebooks/stalign-upstream/xenium-heimage-alignment) | compared | `v` = `3.0e-01` | 143s | 16s |
+| [`merfish-merfish-alignment-affine-only-with-points`](notebooks/stalign-upstream/merfish-merfish-alignment-affine-only-with-points) | compared-affine | `treAffine` = `3.6e-02` | — | — |
 | [`merfish-visium-alignment-with-point-annotator`](notebooks/stalign-upstream/merfish-visium-alignment-with-point-annotator) | compared | `testM` = `5.6e-03` | 229s | 38s |
 | [`merfish-merfish-alignment-affine-only`](notebooks/stalign-upstream/merfish-merfish-alignment-affine-only) | compared | `A` = `6.3e-04` | 56s | 21s |
 | [`xenium-starmap-alignment`](notebooks/stalign-upstream/xenium-starmap-alignment) | compared | `A` = `3.0e-04` | 190s | 20s |
@@ -29,7 +42,6 @@ separated from the code that produced it.
 | [`merfish-merfish-alignment-using-L-T`](notebooks/stalign-upstream/merfish-merfish-alignment-using-L-T) | compared | `phiiJ` = `1.3e-05` | 965s | 155s |
 | [`merfish-merfish-alignment`](notebooks/stalign-upstream/merfish-merfish-alignment) | compared | `A` = `9.8e-06` | 367s | 41s |
 | [`visium-visium-alignment-affine-only`](notebooks/stalign-upstream/visium-visium-alignment-affine-only) | compared | `A` = `1.0e-06` | 34s | 7s |
-| [`merfish-merfish-alignment-affine-only-with-points`](notebooks/stalign-upstream/merfish-merfish-alignment-affine-only-with-points) | compared-affine | `treAffine` = `3.6e-02` | — | — |
 | [`merfish-visium-alignment-with-curve-annotator`](notebooks/stalign-upstream/merfish-visium-alignment-with-curve-annotator) | unreplayable-upstream | — | — | — |
 
 **The two time columns are with deterministic kernels pinned, and are a floor rather than a
@@ -56,25 +68,6 @@ handed squidpy the moving and fixed images the wrong way round, and the earlier 
 `1.9e-01` came from a velocity grid that had collapsed to 2×3 — near-rigid, so near-affine,
 so accidentally close to upstream. Correcting it left the other sixteen rows unchanged to the
 precision shown, which is what three self-cancelling conventions look like from the outside.
-
-## Against upstream's published output
-
-Upstream ships the aligned coordinates from its own runs beside six of the notebooks, which
-is a stronger reference than either replay pass — neither pass produced it. Where the two
-columns agree, the port reproduces upstream's *published* result and not merely upstream's
-code. `merfish-merfish-alignment` is the one case where both sides sit `6.4e-03` from the
-shipped CSV: upstream's code no longer reproduces upstream's committed output, and the port
-tracks the code. These are excluded from the divergence column above, which measures the two
-passes against each other.
-
-| notebook | upstream vs published | squidpy vs published |
-| --- | --- | --- |
-| `merfish-merfish-alignment` | `6.4e-03` | `6.4e-03` |
-| `merfish-merfish-alignment-affine-only` | `2.1e-16` | `1.8e-06` |
-| `merfish-merfish-alignment-using-L-T` | `2.1e-16` | `4.6e-07` |
-| `merfish-visium-alignment` | `8.6e-07` | `1.4e-05` |
-| `merfish-visium-alignment-with-point-annotator` | `1.3e-06` | `2.7e-05` |
-| `visium-visium-alignment-affine-only` | `1.8e-16` | `3.6e-08` |
 
 ## Notes recorded during the run
 

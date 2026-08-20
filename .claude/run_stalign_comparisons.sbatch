@@ -177,10 +177,18 @@ else
 fi
 echo "### squidpy_commit=${SQUIDPY_COMMIT:-unresolved}"
 
-nvidia-smi
-# Per task: every task of the array copies into one durable directory.
-nvidia-smi dmon -s pucvmet -d 10 > "$LOCAL_OUTPUT/gpu-dmon-$TASK_TAG.log" 2>&1 &
-gpu_monitor_pid=$!
+# Guarded rather than assumed: a CPU allocation has no `nvidia-smi`, and under `set -e` a
+# bare call would abort the launcher before any fit ran. The rank-3 flag jobs run on CPU on
+# purpose -- upstream's `LDDMM_3D_to_slice` is bit-identical across processes there and
+# wanders on CUDA -- so this launcher has to survive without a GPU.
+if command -v nvidia-smi >/dev/null 2>&1; then
+    nvidia-smi
+    # Per task: every task of the array copies into one durable directory.
+    nvidia-smi dmon -s pucvmet -d 10 > "$LOCAL_OUTPUT/gpu-dmon-$TASK_TAG.log" 2>&1 &
+    gpu_monitor_pid=$!
+else
+    echo "### no nvidia-smi: running on CPU, no GPU monitoring"
+fi
 
 # Not every compute-node image here carries rsync: job 39552781 reached supergpu26, where
 # `rsync` is absent although the login node has it at /usr/bin/rsync. tar is in every image
@@ -216,7 +224,9 @@ command -v uv >/dev/null || {
 # All installation and downloads happen inside the allocated compute job. The ports
 # environment supplies upstream PyTorch; the staged sibling supplies the JAX port.
 uv sync --frozen
-uv pip install --python "$UV_ENV/bin/python" --editable "$LOCAL_SQUIDPY[jax]" "jax[cuda12]"
+# The CUDA plugin is the default because the sweep runs on H100s; a CPU allocation sets
+# `JAX_INSTALL_SPEC=jax` so it does not pull a GPU backend it cannot use.
+uv pip install --python "$UV_ENV/bin/python" --editable "$LOCAL_SQUIDPY[jax]" "${JAX_INSTALL_SPEC:-jax[cuda12]}"
 
 "$UV_ENV/bin/python" - <<'PY' > "$LOCAL_OUTPUT/environment-$TASK_TAG.txt"
 from importlib.metadata import version
@@ -224,7 +234,9 @@ from importlib.metadata import version
 for package in ("squidpy-ports", "squidpy", "torch", "jax", "jaxlib", "numpy", "scipy"):
     print(f"{package}=={version(package)}")
 PY
-nvidia-smi -q > "$LOCAL_OUTPUT/nvidia-smi-$TASK_TAG.txt"
+if command -v nvidia-smi >/dev/null 2>&1; then
+    nvidia-smi -q > "$LOCAL_OUTPUT/nvidia-smi-$TASK_TAG.txt"
+fi
 
 # `--index` resolves the array task id against `notebook_suite.NOTEBOOKS`, so the batch
 # script never carries a second copy of that ordering. Submitted without an array (or with

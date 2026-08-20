@@ -509,6 +509,101 @@ def _frame_metrics(name: str, expected: Any, actual: Any) -> dict[str, float]:
     return metrics
 
 
+def _corrected_cell_coords(namespace: dict[str, Any]) -> np.ndarray | None:
+    """Per-cell atlas coordinates read at the indices ``analyze3Dalign`` uses for its *labels*.
+
+    Ledger row **D14**. Upstream builds its coordinate grid at 10 microns --
+    ``res = np.array(dx)`` is overwritten by ``res = 10.0`` three lines later
+    (``STalign.py:1975``, ``:1978``) -- and then indexes that grid two different ways for the
+    same cells: ``qi = round((q - origin)/res)`` for the region labels (``:1994``), and
+    ``col/row = (x - X_[0])/dx`` for ``coord0``/``coord1``/``coord2`` (``:1999-2000``). With
+    the notebooks' ``dx=50`` the coordinate readout therefore addresses one fifth of each axis,
+    so ``df[coord*]`` describes the top-left **4 % of the section by area** stretched over all
+    of it. Measured on a real fit, upstream's two readings of its own ``tform`` sit **4267 um**
+    apart at the median, and the reported depth spread is ~10x too small.
+
+    Recomputed here at the label indices, through upstream's own ``build_transform3D`` and
+    upstream's own index formula -- so this is a self-consistent reading of upstream's grid,
+    not a reimplementation of the transform. Applied identically to both passes, so the pair
+    stays comparable; what changes is that the metric describes the whole section.
+
+    Cell positions come from ``df['x']``/``df['y']``, never the namespace's ``x``/``y``: cell
+    [41] of both volume-to-section notebooks rebinds those to ``df['coord0']`` and
+    ``-df['coord1']``, so by the end of the replay the namespace names no longer hold cell
+    positions at all.
+
+    ``None`` when the namespace is not a volume-to-section replay, or is missing a piece.
+    """
+    import torch
+
+    frame, xv, velocity, affine, xJ = (namespace.get(name) for name in ("df", "xv", "v", "A", "xJ"))
+    if frame is None or xv is None or velocity is None or affine is None or xJ is None:
+        return None
+    if not all(column in getattr(frame, "columns", ()) for column in ("x", "y")):
+        return None
+    st = upstream.load()
+    res = 10.0  # upstream's own grid resolution, the one `tform` is actually built on
+    axis_row, axis_col = np.asarray(_numpy(xJ[0]), dtype=float), np.asarray(_numpy(xJ[1]), dtype=float)
+    grid = np.stack(
+        np.meshgrid(
+            np.zeros(1),
+            np.arange(axis_row[0], axis_row[-1], res),
+            np.arange(axis_col[0], axis_col[-1], res),
+            indexing="ij",
+        ),
+        -1,
+    )
+    # Everything goes to CPU, including the fit's own tensors. `build_transform3D` keeps `v`
+    # and `A` wherever it found them and `interp3D` then subtracts `xv[i][0]` from a grid
+    # derived from `XJ` (STalign.py:697), so *any* of the four arriving on a different device
+    # raises "Expected all tensors to be on the same device". Matching the fit's device instead
+    # means guessing which of the four carries the authoritative one -- two attempts got that
+    # wrong. This is a one-off geometric evaluation over the section's cells, not part of the
+    # fit, so paying for a host copy buys the ambiguity away.
+    def cpu(value: Any) -> Any:
+        return torch.as_tensor(_numpy(value), dtype=torch.float64)
+
+    # The context manager is the load-bearing part, not the coercion above it.
+    # `build_transform3D` re-wraps `A`, `v` and `XJ` in `torch.tensor(...)` itself, and those
+    # factory calls land on whatever default device is ambient -- CUDA, under the replay. The
+    # `xv` list is the one argument it does *not* re-wrap, so it stayed on CPU and `interp3D`
+    # hit "Expected all tensors to be on the same device" at `phii[i] -= x[i][0]`
+    # (STalign.py:697). Coercing the arguments alone did not fix that, twice. Pinning the
+    # default device makes upstream's own internal calls agree with them.
+    with torch.device("cpu"):
+        tform = st.build_transform3D(
+            [cpu(axis) for axis in xv],
+            cpu(velocity),
+            cpu(affine),
+            direction="b",
+            XJ=torch.as_tensor(grid, dtype=torch.float64),
+        )
+    query = np.stack((frame["y"].to_numpy(dtype=float), frame["x"].to_numpy(dtype=float)))
+    index = np.round((query - np.stack([axis_row[0], axis_col[0]])[..., None]) / res).astype(int)
+    # Upstream's own comment concedes a different resolution can put points out of bounds; clip
+    # rather than raise, so one stray cell cannot cost the whole metric.
+    index[0] = np.clip(index[0], 0, tform.shape[1] - 1)
+    index[1] = np.clip(index[1], 0, tform.shape[2] - 1)
+    return np.asarray(_numpy(tform[0, index[0], index[1], :]), dtype=float)
+
+
+def _corrected_coord_metrics(upstream_ns: dict[str, Any], squidpy_ns: dict[str, Any]) -> dict[str, float]:
+    """``df[coord*]`` scored again at self-consistent indices -- see :func:`_corrected_cell_coords`.
+
+    Emitted *beside* the uncorrected columns rather than replacing them: the published figures
+    quote the uncorrected ones, so removing them would silently rewrite history, and the pair
+    together is what shows how much the indexing bug was costing.
+    """
+    left, right = _corrected_cell_coords(upstream_ns), _corrected_cell_coords(squidpy_ns)
+    if left is None or right is None or left.shape != right.shape:
+        return {}
+    metrics: dict[str, float] = {}
+    for axis in range(left.shape[1]):
+        delta = np.abs(left[:, axis] - right[:, axis])
+        metrics[f"df[coord{axis}] corrected median abs delta"] = float(np.nanmedian(delta))
+    return metrics
+
+
 def _paired_frames(upstream_ns: dict[str, Any], squidpy_ns: dict[str, Any]) -> dict[str, Any]:
     """The frames both passes computed, merged column-wise with an ``upstream_``/``squidpy_`` prefix.
 
@@ -843,6 +938,52 @@ def niter_scale() -> float | None:
     """
     scale = os.environ.get("STALIGN_NITER_SCALE")
     return float(scale) if scale else None
+
+
+def collapse_upstream_mixture_means() -> bool:
+    """Whether upstream's fixed mixture means are collapsed too, from ``STALIGN_D13_COLLAPSE_MEANS``.
+
+    **Comparison-only, and off by default.** With it set the upstream pass no longer replays
+    the notebook verbatim, so a published sweep must never carry it. Ledger row D13 is what
+    this measures.
+
+    Both ``allen3Datlas`` notebooks pass a length-3 ``muA``/``muB`` against a single-channel
+    ``J``. Upstream broadcasts the mean and sums over the *broadcast* axis
+    (``STalign.py:1554-1555``), so its artifact and background exponents carry a factor 3
+    while ``WM``'s does not -- effective widths ``sigmaA/sqrt(3)`` and ``sigmaB/sqrt(3)``.
+    squidpy validates the length, so the replay collapses the mean for the port and the two
+    sides fit different mixtures. Setting this collapses upstream's the same way, which
+    isolates what that costs: the difference between a run with it and a run without is D13's
+    contribution and nothing else.
+
+    Collapsing *upstream* rather than expanding the port, deliberately. Upstream accepts a
+    length-1 mean and then handles it identically to squidpy, so this needs no squidpy change
+    and is reproducible from a clean checkout -- unlike D11's flag, which lives on an unpushed
+    commit. Handing the port ``sigmaA/sqrt(3)`` instead would match the exponent but leave its
+    ``(2*pi*sigma^2)^(C/2)`` prefactor ``sqrt(3)`` too large on ``WA`` and ``WB`` and unchanged
+    on ``WM``, and that does not cancel in the normalised posterior.
+
+    Rank 3 only, like the divergence: no rank-2 notebook passes a fixed mean whose length
+    disagrees with its section, so there is nothing there for this to change.
+    """
+    return os.environ.get("STALIGN_D13_COLLAPSE_MEANS", "") not in {"", "0"}
+
+
+def _section_channels(section: Any) -> int:
+    """Channel count of the fixed section, which is what a fixed mixture mean has to match."""
+    array = np.asarray(_numpy(section))
+    return array.shape[0] if array.ndim == 3 else 1
+
+
+def _collapsed_mean(mean: Any, n_channels: int) -> np.ndarray:
+    """One fixed mixture-mean entry per section channel.
+
+    The notebooks' length-3 means are three copies of one value, so resizing loses no
+    information -- what it drops is upstream's factor-of-3 sum over the broadcast axis. Shared
+    by both passes so :func:`collapse_upstream_mixture_means` cannot collapse one side by a
+    different rule than the other.
+    """
+    return np.resize(np.atleast_1d(_numpy(mean)).astype(float), n_channels)
 
 
 def _capped(kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -1311,6 +1452,9 @@ def _pair_passes(notebook: str, upstream_fit: Any, squidpy_fit: Any, *, function
     skipped_note = _require_same_cells_ran(notebook, upstream_pass, squidpy_pass)
     metrics = _namespace_metrics(upstream_pass.namespace, squidpy_pass.namespace)
     metrics.update(_published_metrics(notebook, upstream_pass.namespace, squidpy_pass.namespace))
+    # Beside `df[coord*]`, which upstream reads off the wrong fifth of each axis -- ledger D14.
+    # A no-op for every notebook that has no `df`/`xv`/`v`/`A`, i.e. all fifteen rank-2 ones.
+    metrics.update(_corrected_coord_metrics(upstream_pass.namespace, squidpy_pass.namespace))
     cell_source = dict(_notebook_cells(notebook))
     figures, figure_sources, port_figures = [], [], []
     for (cell_number, upstream_png), (_, squidpy_png) in zip(upstream_pass.figures, squidpy_pass.figures, strict=False):
@@ -1496,9 +1640,13 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
     def upstream_fit(args: tuple[Any, ...], kwargs: dict[str, Any], original: Any) -> Any:
         call = _capped(kwargs)
         call["device"] = device
+        n_channels = _section_channels(args[3])
         for key in ("muA", "muB"):
             if call.get(key) is not None:
-                call[key] = torch.as_tensor(call[key], device=device, dtype=torch.float64)
+                mean = call[key]
+                if collapse_upstream_mixture_means():
+                    mean = _collapsed_mean(mean, n_channels)
+                call[key] = torch.as_tensor(mean, device=device, dtype=torch.float64)
         result = original(*args, **call)
         _await_fit_device()  # same rule as the port's `block_until_ready`; see `_await_fit_device`
         return _FitResult({key: _on_fit_device(value) for key, value in result.items()})
@@ -1508,22 +1656,21 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
 
         reference_axes = [_numpy(axis) for axis in args[0]]
         section_axes = [_numpy(axis) for axis in args[2]]
-        forwarded = {
-            key: _cast_like(value, PORT_DEFAULTS[key], name=key)
-            for key, value in _capped(kwargs).items()
-            if key not in _SLICE_DROPPED and key in PORT_DEFAULTS and value is not None
-        }
+        # Upstream's own rank-3 defaults underneath the notebook's kwargs -- see
+        # `_slice_forwarded`. Without this the port silently uses squidpy's `_VOLUME_DEFAULTS`
+        # for anything the notebook omits, and any retuning there contaminates the parity
+        # numbers instead of showing up as a documented divergence.
+        forwarded = _slice_forwarded(kwargs)
         # The notebooks pass `muA=[3,3,3]` against a single-channel section and rely on
         # upstream broadcasting three identical terms -- which quietly makes its artifact
         # scale `sigmaA/sqrt(3)`. squidpy validates the length, so the mean is collapsed to
-        # one entry per section channel here and the difference is reported, not hidden.
+        # one entry per section channel here. What that costs is ledger row D13, measured by
+        # `STALIGN_D13_COLLAPSE_MEANS` -- see `collapse_upstream_mixture_means`.
         section = np.asarray(_numpy(args[3]))
-        n_channels = section.shape[0] if section.ndim == 3 else 1
+        n_channels = _section_channels(section)
         for key in ("muA", "muB"):
-            mean = kwargs.get(key)
-            if mean is not None:
-                values = np.atleast_1d(_numpy(mean)).astype(float)
-                forwarded[key] = np.resize(values, n_channels)
+            if kwargs.get(key) is not None:
+                forwarded[key] = _collapsed_mean(kwargs[key], n_channels)
 
         fit = align_stalign_volume(
             as_sdata(_channels_first(args[1], ndim=3), reference_axes),
@@ -1541,6 +1688,51 @@ def _compare_lddmm_3d(notebook: str) -> ComparisonResult:
     result.metrics.update(convergence)
     _append_convergence_panel(result, convergence, traces)
     return result
+
+
+def upstream_slice_defaults() -> dict[str, Any]:
+    """Upstream's own ``LDDMM_3D_to_slice`` defaults, read off its signature.
+
+    The rank-2 path fills every keyword a notebook omits from
+    :func:`upstream_solver_defaults`, so both passes start from identical parameters wherever
+    the notebook is silent. Rank 3 had no equivalent: it forwarded only what the notebook
+    passed and let squidpy's own ``_VOLUME_DEFAULTS`` supply the rest.
+
+    That was invisible for exactly as long as those defaults matched upstream's, and it stops
+    being invisible the moment squidpy retunes one of them for rank 3 -- the comparison would
+    then run the port on a different fit and publish the gap as a port divergence. Which is
+    the ``_IMAGE_DEFAULTS`` mistake that :func:`upstream_solver_defaults` exists to prevent,
+    one rank up. Reading them from upstream keeps the pin no matter what squidpy chooses.
+
+    Note these are *not* ``LDDMM``'s: upstream's 3D entry point declares its own
+    ``expand=1.25``, ``epL=1e-6``, ``epT=1e1``, ``epV=1e3``, ``sigmaR=1e8``.
+    """
+    st = upstream.load()
+    return {
+        name: parameter.default
+        for name, parameter in inspect.signature(st.LDDMM_3D_to_slice).parameters.items()
+        if parameter.default is not inspect.Parameter.empty
+    }
+
+
+def _slice_forwarded(captured: dict[str, Any]) -> dict[str, Any]:
+    """What the port is handed for a rank-3 replay: upstream's defaults, then the notebook's own.
+
+    Order matters and is the whole point -- a keyword the notebook passes must win, and a
+    keyword it omits must come from upstream rather than from squidpy. Kept as a function
+    rather than inlined so the precedence is testable without a GPU.
+    """
+    defaults = {
+        key: value
+        for key, value in upstream_slice_defaults().items()
+        if key not in _SLICE_DROPPED and key in PORT_DEFAULTS and value is not None
+    }
+    forwarded = {
+        key: value
+        for key, value in {**defaults, **_capped(captured)}.items()
+        if key not in _SLICE_DROPPED and key in PORT_DEFAULTS and value is not None
+    }
+    return {key: _cast_like(value, PORT_DEFAULTS[key], name=key) for key, value in forwarded.items()}
 
 
 def _initial_affine_xyz(kwargs: dict[str, Any]) -> np.ndarray | None:
@@ -1710,6 +1902,13 @@ def _manifest(
         "python": platform.python_version(),
         "packages": {name: _package_version(name) for name in ("squidpy", "squidpy-ports", "jax", "jaxlib", "torch")},
         "squidpy_commit": upstream.squidpy_commit(),
+        # Recorded on every notebook, not only the two it can affect: a manifest without the
+        # key would be indistinguishable from one written before the flag existed.
+        "d13_collapse_means": collapse_upstream_mixture_means(),
+        # Comparison-only flags that change *what was compared* rather than how it was run.
+        # A result must not be separable from the condition it ran under, so both are recorded
+        # on every notebook whether or not it can be affected.
+        "d11_upstream_reg_energy_axes": bool(os.environ.get("SQUIDPY_STALIGN_UPSTREAM_REG_ENERGY_AXES")),
     }
 
 

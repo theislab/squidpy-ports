@@ -83,6 +83,20 @@ thing not in git is the cluster output, which is on Lustre.
 
 ## TODO
 
+- [ ] **Run the D13 flag sweep.** `sbatch .claude/run_stalign_d13_flag.sbatch` -- written, never
+  submitted. Ledger row D13: both `allen3Datlas` notebooks pass a length-3 `muA`/`muB` against a
+  single-channel `J`, upstream sums over the broadcast axis (`STalign.py:1554-1555`) so its
+  artifact and background widths are effectively `sigma/sqrt(3)` while `WM`'s is not, and the
+  replay collapses the mean for the port because squidpy validates the length. A candidate cause
+  of the rank-3 divergence *independent of D11*, with no number yet. The job collapses upstream's
+  mean instead of expanding the port's, so it needs no squidpy change and is reproducible from a
+  clean checkout -- unlike the D11 flag below, which is still on an unpushed commit. Runs on
+  `cpu_p`, no GPU: that is route 2 of the item below, taken for this experiment first because a
+  standing reference is cheaper than averaging a moving one. Read the result with
+  `python3 src/squidpy_ports/stalign/flag_report.py <output>`; if the two replicates of a
+  condition disagree at all, the CPU-determinism premise is wrong and that has to be chased
+  before any number from the sweep is quoted.
+
 - [ ] **Attribute the rank-3 per-cell region disagreement, or stop quoting it.** The D11
   flag experiment (jobs 39758694-97, `merfish-allen3Datlas`, two reps per condition on one
   pinned node) settled the velocity field: `v` relative L2 goes **1.81 -> 0.055** when

@@ -37,26 +37,18 @@ file above is linked: none of it has to be taken on faith from a figure.
 
 ## Results
 
-The tables below are a real run, not a claim about one, and nothing in them is written by hand.
-Statuses and expected-failure reasons come from pytest's JUnit report; each description is the
-test's **own docstring**, read from the source with `ast`. A wrong description is therefore a wrong
-docstring, and both land in the same review.
-
-```{include} _static/tests/results.md
-```
-
 Run against upstream STalign `b2068ed` and squidpy fork `6a63ff8` — the same pinned pair behind the
 figures on the [visual comparison](stalign-comparison.md) page, so the pictures and the assertions
 describe one environment. Raw pytest output is served beside this page:
 [`squidpy-ports-tests.log`](_static/tests/squidpy-ports-tests.log) and
 [`squidpy-fork-tests.log`](_static/tests/squidpy-fork-tests.log).
 [Running the tests yourself](https://github.com/theislab/squidpy-ports#running-the-tests) is four
-commands, and regenerating this table is a fifth.
+commands.
 
 :::{warning}
 The fork's reference suite is marked `pytest.mark.reference`, and squidpy's `addopts` carry
-`-m "not reference"`. A plain `pytest` **silently deselects all 62 of them** and reports the
-remaining 32 as a clean run — so it must be overridden explicitly:
+`-m "not reference"`. A plain `pytest` **silently deselects the whole reference suite** and reports
+the remainder as a clean run — so it must be overridden explicitly:
 
 ```bash
 pytest -m "reference or not reference" \
@@ -69,7 +61,7 @@ two**, pinned as strict `xfail` so that silently adopting upstream's behaviour b
 Each cites a row in the [divergence ledger](STALIGN_DIVERGENCES.md), and
 `test_divergences_doc_covers_all_xfails` asserts every xfail cites a row that exists.
 
-Nothing is skipped in the run above because both sides are installed. Running this repo's suite
+Nothing is skipped when both sides are installed. Running this repo's suite
 alone leaves one test skipped — it needs JAX and squidpy, which this repo deliberately does not
 depend on — and it says so rather than passing quietly.
 
@@ -93,11 +85,3 @@ and the script refuses to run otherwise.
 **Reduction order still differs across platforms** (macOS Accelerate vs Linux OpenBLAS). squidpy's
 scheduled job runs on ubuntu, so the committed bundle should be generated on ubuntu too: trigger the
 `generate` workflow and download its artifact rather than committing a bundle built on a laptop.
-
-## Why not just reimplement upstream here?
-
-Nothing in this repository reimplements upstream. Every value is produced by calling a public
-upstream function, or by observing the unmodified `LDDMM` loop through autograd hooks — a
-reimplementation would make *this* repository the thing under test. The single documented exception
-(the four statements computing `LL`/`K`/`DV`, which live inside the loop with no function boundary)
-is quoted verbatim with line references.
