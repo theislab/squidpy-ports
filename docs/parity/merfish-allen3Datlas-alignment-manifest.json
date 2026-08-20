@@ -1,5 +1,5 @@
 {
-  "host": "supergpu17.scidom.de",
+  "host": "supergpu31.scidom.de",
   "note": "This notebook fits a 3D volume to a 2D section. The two sides are *expected* to differ numerically here, unlike every 2D notebook above: upstream's 3D regularisation energy transforms two of the three spatial axes (`dim=(1,2)`, STalign.py:1504) while smoothing that same energy's gradient over all three (`dim=(1,2,3)`, :1527), so it descends on a different objective than the one it reports. Squidpy uses every spatial axis in both places. The divergence below measures that deliberate choice -- see `docs/STALIGN_DIVERGENCES.md` row D11 -- and is not a port defect.",
   "notebook": "merfish-allen3Datlas-alignment.ipynb",
   "packages": {
@@ -10,10 +10,10 @@
     "torch": "2.13.0"
   },
   "python": "3.13.14",
-  "slurm_job_id": "39747877",
+  "slurm_job_id": "39759148",
   "squidpy_commit": "2bff194fc5fa9ff3fe41816af14f745609c8bada",
-  "squidpy_seconds": 19.400433239003178,
+  "squidpy_seconds": 219.62560461799148,
   "status": "compared",
-  "upstream_seconds": 104.49471330299275,
+  "upstream_seconds": 91.23548757098615,
   "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }

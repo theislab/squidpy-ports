@@ -1,5 +1,5 @@
 {
-  "A relative L2": 2.4435876801273448e-05,
+  "A relative L2": 2.44358768014914e-05,
   "df1[acronym] label disagreement": 0.0,
   "df1[acronym] label set jaccard": 1.0,
   "df1[acronym] labels only squidpy": 0.0,
@@ -38,14 +38,19 @@
   "df2[spot.id] median abs delta": 0.0,
   "df2[x] median abs delta": 0.0,
   "df2[y] median abs delta": 0.0,
+  "energy first": 1592.3712101873432,
+  "energy iterations": 1000.0,
+  "energy last": 563.8679243347991,
+  "energy last-tenth drop fraction": 0.0028859039602077883,
+  "energy total drop fraction": 0.6458941729620572,
   "extentI relative L2": 0.0,
   "extentJ relative L2": 0.0,
   "levels relative L2": 0.0,
-  "phi relative L2": 7.998811118221802e-07,
-  "phiI relative L2": 1.4800442717428342e-05,
-  "phii relative L2": 8.035938620527319e-07,
-  "phiiJ relative L2": 1.4162855879113066e-05,
+  "phi relative L2": 7.998811118194992e-07,
+  "phiI relative L2": 1.4800442717454289e-05,
+  "phii relative L2": 8.035938620528199e-07,
+  "phiiJ relative L2": 1.4162855879060338e-05,
   "tpointsI relative L2": 0.0,
-  "tpointsJ relative L2": 8.386648304546075e-07,
-  "v relative L2": 4.8075063975309874e-15
+  "tpointsJ relative L2": 8.38664830454337e-07,
+  "v relative L2": 4.870943368136689e-15
 }

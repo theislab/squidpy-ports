@@ -10,10 +10,10 @@
     "torch": "2.13.0"
   },
   "python": "3.13.14",
-  "slurm_job_id": "39747922",
+  "slurm_job_id": "39759210",
   "squidpy_commit": "2bff194fc5fa9ff3fe41816af14f745609c8bada",
-  "squidpy_seconds": 23.026225325011183,
+  "squidpy_seconds": 155.25479055702453,
   "status": "compared",
-  "upstream_seconds": 920.4974229750223,
+  "upstream_seconds": 965.1366636049934,
   "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }

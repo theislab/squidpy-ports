@@ -1,5 +1,5 @@
 {
-  "A relative L2": 0.0002432595175773683,
+  "A relative L2": 0.00024325951757836776,
   "df1[Unnamed: 0] label disagreement": 0.0,
   "df1[Unnamed: 0] label set jaccard": 1.0,
   "df1[Unnamed: 0] labels only squidpy": 0.0,
@@ -11,12 +11,17 @@
   "df1[min_x] median abs delta": 0.0,
   "df1[min_y] median abs delta": 0.0,
   "df1[volume] median abs delta": 0.0,
+  "energy first": 1505.6833485681577,
+  "energy iterations": 1000.0,
+  "energy last": 694.4654994120543,
+  "energy last-tenth drop fraction": 0.001346249212429443,
+  "energy total drop fraction": 0.5387705522064369,
   "extentI relative L2": 0.0,
   "extentJ relative L2": 0.0,
-  "tpointsI relative L2": 1.5740866326340773e-06,
-  "v relative L2": 4.648842917575762e-15,
+  "tpointsI relative L2": 1.5740866326338393e-06,
+  "v relative L2": 4.640498012534911e-15,
   "xI0 relative L2": 0.0,
-  "xI_LDDMM relative L2": 1.997250260237711e-07,
+  "xI_LDDMM relative L2": 1.9972502602312938e-07,
   "yI0 relative L2": 0.0,
-  "yI_LDDMM relative L2": 2.6068732610851673e-06
+  "yI_LDDMM relative L2": 2.6068732610848565e-06
 }

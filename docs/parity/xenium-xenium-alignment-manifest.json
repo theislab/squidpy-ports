@@ -1,5 +1,5 @@
 {
-  "host": "supergpu22.scidom.de",
+  "host": "supergpu20.scidom.de",
   "note": "The two sections overlap only partially. Unmatched cells are expected; the matching-weight panels identify the supported overlap. Both passes skipped 2 cell(s) unrelated to the fit -- cell 50: RuntimeError: indices should be either on cpu or on the same device as the indexed tensor (cpu); cell 51: RuntimeError: indices should be either on cpu or on the same device as the indexed tensor (cpu)",
   "notebook": "xenium-xenium-alignment.ipynb",
   "packages": {
@@ -10,10 +10,10 @@
     "torch": "2.13.0"
   },
   "python": "3.13.14",
-  "slurm_job_id": "39747874",
+  "slurm_job_id": "39759108",
   "squidpy_commit": "2bff194fc5fa9ff3fe41816af14f745609c8bada",
-  "squidpy_seconds": 5.903275603021029,
+  "squidpy_seconds": 11.526808685972355,
   "status": "compared",
-  "upstream_seconds": 10.090209302958101,
+  "upstream_seconds": 11.415245794982184,
   "upstream_sha": "b2068edc98974efa54537eca194736e177bbe11d"
 }
