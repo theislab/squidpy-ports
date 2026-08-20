@@ -187,16 +187,20 @@ gpu_monitor_pid=$!
 # and takes the same excludes, so staging succeeds either way rather than dying at the last
 # step before the real work. Excludes matter for a full checkout; the staged tree already
 # omits them.
+# The `#SBATCH --output` logs land in the submit directory, which *is* the tree being
+# staged, so tar reads a file that is still being appended to and exits non-zero:
+# "file changed as we read it". Harmless until two tasks share a node, which is exactly
+# what pinning `--nodelist` for a determinism check does -- three tasks died that way.
 stage_tree() {
     src="$1"
     dest="$2"
     mkdir -p "$dest"
     if command -v rsync >/dev/null 2>&1; then
         rsync -a --delete --exclude=.git --exclude=.venv --exclude=_build \
-            --exclude=cluster-results "$src/" "$dest/"
+            --exclude=cluster-results --exclude="stalign-compare-*" "$src/" "$dest/"
     else
         tar -C "$src" --exclude=.git --exclude=.venv --exclude=_build \
-            --exclude=cluster-results -cf - . | tar -C "$dest" -xf -
+            --exclude=cluster-results --exclude="stalign-compare-*" -cf - . | tar -C "$dest" -xf -
     fi
 }
 
