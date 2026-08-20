@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # STalign port — divergence ledger
 
 Where squidpy's JAX port (`src/squidpy/experimental/tl/_align/_stalign_impl/`) differs from

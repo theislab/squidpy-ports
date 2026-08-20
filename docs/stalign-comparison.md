@@ -108,3 +108,12 @@ port against upstream at the primitive, energy, gradient, trajectory, converged 
 the velocity field matches to ~1e-15, and the ~1e-3 figures above come from rasterisation at the
 boundaries, not from the fit. Every test, what it asserts, and whether it passes is on
 [Numerical tests](correctness.md).
+
+```{toctree}
+:hidden: true
+:maxdepth: 1
+
+Xenium ↔ Xenium <notebooks/stalign-xenium-comparison>
+MERFISH ↔ MERFISH <notebooks/stalign-merfish-comparison>
+Visium ↔ Visium (affine) <notebooks/stalign-visium-affine-comparison>
+```
