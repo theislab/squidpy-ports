@@ -31,10 +31,12 @@ OUT="${2:-$WORKSPACE/notebooks-out/$SLURM_JOB_ID}"
 (( $# > 2 )) && shift 2 || set --
 SELECTION=("$@")
 
-# Pinned, and installed from the clone rather than fetched: the canonical rev every other
-# result in this workspace is measured against. The notebooks touch no comparison-only flag,
-# so this behaves as plain 2bff194f.
+# Tracked at its branch tip, like the ports clone, rather than pinned to a SHA: a pinned rev
+# silently goes stale, and this one did -- the notebooks ran for a day against 2bff194f while
+# `sigmaR` for the volume case had already been retuned from upstream's 1e8 to 1e6 further up
+# the branch. Override with `SQUIDPY_REV=<sha>` to reproduce an older result.
 SQUIDPY="$WORKSPACE/squidpy-clone"
+SQUIDPY_REV="${SQUIDPY_REV:-origin/feat/experimental-fit-core}"
 # The vendored upstream datasets and the Allen atlas. Large files on Lustre, read once each;
 # symlinked into the working directory rather than copied, because the notebooks resolve
 # their inputs relative to the current directory.
@@ -86,8 +88,10 @@ echo "### host=$(hostname) job=$SLURM_JOB_ID started=$(date --iso-8601=seconds)"
 # `PORTS_REV=<sha> sbatch --export=ALL,PORTS_REV` when reproducing an older result.
 git -C "$PORTS" fetch --quiet origin
 git -C "$PORTS" checkout --quiet --detach "${PORTS_REV:-origin/main}"
+git -C "$SQUIDPY" fetch --quiet origin
+git -C "$SQUIDPY" checkout --quiet --detach "$SQUIDPY_REV"
 echo "### ports=$PORTS @ $(git -C "$PORTS" rev-parse HEAD)"
-echo "### squidpy=$SQUIDPY @ $(git -C "$SQUIDPY" rev-parse --short HEAD 2>/dev/null || echo '?')"
+echo "### squidpy=$SQUIDPY @ $(git -C "$SQUIDPY" rev-parse HEAD) ($SQUIDPY_REV)"
 echo "### scratch=$SCRATCH out=$OUT"
 echo "### uv_cache=$UV_CACHE_DIR size=$(du -sh "$UV_CACHE_DIR" 2>/dev/null | cut -f1)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
