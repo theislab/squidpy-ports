@@ -119,21 +119,22 @@ thing not in git is the cluster output, which is on Lustre.
   H100 through the held-node workflow (`d11run.sh`), with squidpy installed straight from a git
   rev -- `uv pip install "squidpy @ git+.../squidpy.git@<rev>"`, no rsync.
 
-  **Proposed set: four new notebooks, not sixteen.** The ten points-to-points notebooks differ
-  only in which CSV they read and their initial rotation/scale -- as public API that is three
-  lines each, and sixteen documents of three lines is not sixteen documents' worth of
-  information. One notebook per *shape*, with a table of the per-dataset arguments:
+  **One notebook per upstream notebook, named after it** -- `starmap-allen3Datlas-alignment.ipynb`
+  becomes `starmap-allen3Datlas.ipynb`. An earlier version of this note proposed collapsing the
+  seventeen into four by shape; that was wrong and is withdrawn. The set is a one-to-one
+  re-expression of upstream's notebooks through the public API, so a reader can put ours beside
+  theirs, and the file names have to carry that.
 
-    | new notebook | API path | covers |
-    | --- | --- | --- |
-    | `starmap-allen3Datlas` (written) | `rasterize_points` -> `align_stalign_volume` -> `transform` -> `sample_volume` | 1 |
-    | `merfish-allen3Datlas` | same, `dx=10`, `slice=177`, uniform `initial_scale=0.9` so no `initial_affine` needed | 1 |
-    | `merfish-merfish` | `align_stalign_obs` | 10 -- merfish-merfish x4, merfish-xenium, xenium-xenium, xenium-starmap, visium-visium-affine-only, heart x2 |
-    | `merfish-visium` | `rasterize_points` + `align_stalign_image`, with landmarks | 4 -- merfish-visium x3, xenium-heimage |
-    | `merfish-merfish-landmarks` | `align_landmarks(fit="affine")` | 1 |
+  Written so far: `starmap-allen3Datlas`, `merfish-allen3Datlas` (volume, `align_stalign_volume`);
+  `merfish-merfish` (`align_stalign_obs`), `merfish-merfish-affine-only-with-points`
+  (`align_landmarks`), `merfish-visium` (`align_stalign_image`). The remaining twelve are the
+  same three planar routes on different files -- `merfish-xenium`, `xenium-xenium`,
+  `xenium-starmap`, `visium-visium-affine-only`, both `heart` ones and the three other
+  `merfish-merfish` variants onto `align_stalign_obs`; `xenium-heimage` and
+  `merfish-visium-with-point-annotator` onto `align_stalign_image`.
 
-  That is 5 notebooks for all 17, and it answers the first open question above by default: **the
-  notebooks stop being a comparison.** Parity stays where it already runs -- the replay sweep
+  That also answers the first open question above by default: **the notebooks stop being a
+  comparison.** Parity stays where it already runs -- the replay sweep
   (`run_stalign_comparisons.sbatch` -> `notebook_suite`) and `tests/test_stalign_reference.py` --
   so `_namespace_metrics`, `_paired_frames`, `_require_same_cells_ran` and `_compose_pair` keep
   their caller and nothing gets deleted. `docs/stalign-comparison.md` folds into `docs/parity.md`;
