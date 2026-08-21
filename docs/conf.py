@@ -76,6 +76,11 @@ intersphinx_mapping = {
     "anndata": ("https://anndata.readthedocs.io/en/stable/", None),
     "scanpy": ("https://scanpy.readthedocs.io/en/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
+    # For the container types the notebooks build. Squidpy is deliberately absent: the
+    # `experimental.tl.align` functions live on a fork branch and are in no published API doc,
+    # so a role pointing at them would be an unresolved reference and `nitpicky` plus `-W`
+    # would fail the build. Those are linked to source at a pinned revision instead.
+    "spatialdata": ("https://spatialdata.scverse.org/en/stable/", None),
 }
 
 # List of patterns, relative to source directory, that match files and

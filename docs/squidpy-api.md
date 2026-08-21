@@ -29,7 +29,7 @@ notebooks/squidpy-api/merfish-allen3Datlas
 :maxdepth: 1
 
 notebooks/squidpy-api/merfish-merfish
-notebooks/squidpy-api/merfish-merfish-using-L-T
+notebooks/squidpy-api/merfish-merfish-initial-affine
 notebooks/squidpy-api/merfish-merfish-affine-only
 notebooks/squidpy-api/merfish-merfish-affine-only-with-points
 notebooks/squidpy-api/merfish-xenium

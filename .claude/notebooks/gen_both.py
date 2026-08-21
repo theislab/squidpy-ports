@@ -1,5 +1,35 @@
 import json
 import os
+import re
+
+#: The squidpy revision these notebooks are executed against. The functions they call live on a
+#: fork branch and are absent from squidpy's published API docs, so an intersphinx role would be
+#: an unresolved reference and `nitpicky = True` plus `-W` would fail the build. Linking to the
+#: source at a pinned revision is clickable, exact, and cannot rot into pointing at something else.
+SQUIDPY_REV = "6c4b5ce93b100f43fe873949aef6446461a276c0"
+_SRC = f"https://github.com/selmanozleyen/squidpy/blob/{SQUIDPY_REV}/src/squidpy"
+API = {
+    "rasterize_points": "experimental/im/_rasterize_points.py",
+    "sample_volume": "experimental/im/_rasterize_points.py",
+    "align_stalign_obs": "experimental/tl/_align/_api.py",
+    "align_stalign_image": "experimental/tl/_align/_api.py",
+    "align_stalign_volume": "experimental/tl/_align/_api.py",
+    "align_landmarks": "experimental/tl/_align/_api.py",
+}
+#: Classes that *are* published, so these resolve through intersphinx instead.
+ROLES = {
+    "Image2DModel": ":class:`~spatialdata.models.Image2DModel`",
+    "PointsModel": ":class:`~spatialdata.models.PointsModel`",
+}
+
+
+def linkify(src):
+    """Make every API mention in prose clickable, once, leaving code cells alone."""
+    for name, module in API.items():
+        src = re.sub(rf"(?<![\[`\w])`{name}`(?!\])", f"[`{name}`]({_SRC}/{module})", src)
+    for name, role in ROLES.items():
+        src = re.sub(rf"(?<![\[`\w])`{name}`(?!\])", role, src)
+    return src
 
 
 def lines(src):
@@ -9,7 +39,8 @@ def lines(src):
 
 
 def md(s):
-    """A markdown cell."""
+    """A markdown cell, with API mentions linked."""
+    s = linkify(s)
     return {"cell_type": "markdown", "metadata": {}, "source": lines(s)}
 
 
@@ -172,9 +203,15 @@ def write(path, cells):
             import ast
 
             ast.parse("".join(c["source"]))
+    # nbformat requires a cell id and warns loudly without one -- "will become a hard error in
+    # future nbformat versions". Deterministic, so regenerating does not churn the diff.
+    for index, cell in enumerate(cells):
+        cell.setdefault("id", f"cell-{index:02d}")
+
     if os.path.exists(path):
         current = json.load(open(path))
-        if [c["source"] for c in current["cells"]] == [c["source"] for c in cells]:
+        same = [c["source"] for c in current["cells"]] == [c["source"] for c in cells]
+        if same and all("id" in c for c in current["cells"]):
             print(f"unchanged {path}")
             return
 

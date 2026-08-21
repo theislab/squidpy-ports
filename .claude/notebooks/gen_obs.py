@@ -102,15 +102,19 @@ SPECS = {
         "at which the velocity field is allowed to start moving; setting it past `niter` means "
         "it never does, so only the affine part is ever fitted.",
     ),
-    "merfish-merfish-using-L-T": (
+    "merfish-merfish-initial-affine": (
         "merfish-merfish-alignment-using-L-T",
         "merfish2",
         "merfish3",
         45,
         "dx=15.0, blur=1.5, niter=10000, epV=50",
         "The same pair again, initialised by an explicit rotation and translation rather than by "
-        "landmarks. Upstream's variant exists to show the `L`/`T` entry point; here the rotation "
-        "is applied to the coordinates and the fit starts from the identity.",
+        "landmarks. Upstream calls its version `using-L-T` after the two arguments it passes: `L` "
+        "is the 2x2 linear part of the starting affine and `T` the translation vector. squidpy has "
+        "no such pair -- it takes one homogeneous `initial_affine`, or derives the start from "
+        "landmarks -- so here the rotation is applied to the coordinates instead and the fit starts "
+        "from the identity, which keeps the initialisation visible rather than folded into a matrix "
+        "convention.",
     ),
     "merfish-xenium": (
         "merfish-xenium-alignment",
