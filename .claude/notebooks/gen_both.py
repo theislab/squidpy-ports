@@ -2,6 +2,28 @@ import json
 import os
 import re
 
+#: STalign's pinned revision, and which of its notebooks each of ours re-expresses. Injected into
+#: the first markdown cell by `write`, so every page opens with a link to the original it mirrors.
+STALIGN_REV = "b2068edc98974efa54537eca194736e177bbe11d"
+UPSTREAM = {
+    "starmap-allen3Datlas": "starmap-allen3Datlas-alignment",
+    "merfish-allen3Datlas": "merfish-allen3Datlas-alignment",
+    "merfish-merfish": "merfish-merfish-alignment",
+    "merfish-merfish-initial-affine": "merfish-merfish-alignment-using-L-T",
+    "merfish-merfish-affine-only": "merfish-merfish-alignment-affine-only",
+    "merfish-merfish-affine-only-with-points": "merfish-merfish-alignment-affine-only-with-points",
+    "merfish-xenium": "merfish-xenium-alignment",
+    "xenium-xenium": "xenium-xenium-alignment",
+    "xenium-starmap": "xenium-starmap-alignment",
+    "xenium-heimage": "xenium-heimage-alignment",
+    "visium-visium-affine-only": "visium-visium-alignment-affine-only",
+    "heart-alignment": "heart-alignment",
+    "heart-alignment-varying-thickness": "heart-alignment-varying-thickness",
+    "merfish-visium": "merfish-visium-alignment",
+    "merfish-visium-with-point-annotator": "merfish-visium-alignment-with-point-annotator",
+    "merfish-visium-with-curve-annotator": "merfish-visium-alignment-with-curve-annotator",
+}
+
 #: The squidpy revision these notebooks are executed against. The functions they call live on a
 #: fork branch and are absent from squidpy's published API docs, so an intersphinx role would be
 #: an unresolved reference and `nitpicky = True` plus `-W` would fail the build. Linking to the
@@ -207,6 +229,14 @@ def write(path, cells):
     # future nbformat versions". Deterministic, so regenerating does not churn the diff.
     for index, cell in enumerate(cells):
         cell.setdefault("id", f"cell-{index:02d}")
+
+    origin = UPSTREAM.get(os.path.basename(path).removesuffix(".ipynb"))
+    if origin is not None:
+        url = f"https://github.com/JEFworks-Lab/STalign/blob/{STALIGN_REV}/docs/notebooks/{origin}.ipynb"
+        note = f"\n\nSTalign's own version of this analysis: [`{origin}`]({url}).\n"
+        first = cells[0]["source"]
+        if "STalign's own version" not in "".join(first):
+            first[-1] = first[-1].rstrip("\n") + note
 
     if os.path.exists(path):
         current = json.load(open(path))

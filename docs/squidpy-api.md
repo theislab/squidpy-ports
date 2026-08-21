@@ -1,9 +1,9 @@
 # The same alignments, through squidpy's public API
 
 Upstream's notebooks call `STalign.LDDMM` and friends directly, and build their own rasters,
-coordinate axes and initial affines along the way. These are the same seventeen analyses written
+coordinate axes and initial affines along the way. These are sixteen of those seventeen analyses written
 against squidpy's public API instead — one page per upstream notebook, named after it, so ours can
-be read beside [the replayed originals](parity.md).
+be read beside [STalign's own](https://github.com/JEFworks-Lab/STalign/tree/b2068edc98974efa54537eca194736e177bbe11d/docs/notebooks).
 
 Nothing here reaches into a private module. Four calls cover every case:
 
@@ -50,6 +50,10 @@ notebooks/squidpy-api/merfish-visium-with-point-annotator
 notebooks/squidpy-api/merfish-visium-with-curve-annotator
 notebooks/squidpy-api/xenium-heimage
 ```
+
+The one upstream notebook without an equivalent here is `merfish-merfish-alignment-simulation`,
+which fits a section against a synthetically deformed copy of itself rather than against another
+section.
 
 ## What differs from upstream, and why
 

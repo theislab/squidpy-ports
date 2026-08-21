@@ -1,6 +1,6 @@
 # Numerical tests
 
-The [side-by-side panels](stalign-comparison.md) are real-data evidence, but they are **not** the
+The [executed notebooks](squidpy-api.md) are real-data evidence, but they are **not** the
 gating check — a figure can look right while the algorithm underneath has drifted. The gate is a
 layered, seeded reference suite: every stage of the algorithm is asserted against values that
 upstream STalign itself computed.
@@ -38,7 +38,7 @@ file above is linked: none of it has to be taken on faith from a figure.
 ## Results
 
 Run against upstream STalign `b2068ed` and squidpy fork `6a63ff8` — the same pinned pair behind the
-figures on the [visual comparison](stalign-comparison.md) page, so the pictures and the assertions
+figures in the [executed notebooks](squidpy-api.md), so the pictures and the assertions
 describe one environment. Raw pytest output is served beside this page:
 [`squidpy-ports-tests.log`](_static/tests/squidpy-ports-tests.log) and
 [`squidpy-fork-tests.log`](_static/tests/squidpy-fork-tests.log).
