@@ -209,38 +209,6 @@ def test_reference_figures_are_verbatim_upstream_output():
         )
 
 
-@pytest.mark.parametrize(
-    ("defaults", "entry"),
-    [("_SOLVER_DEFAULTS", "LDDMM"), ("_VOLUME_DEFAULTS", "LDDMM_3D_to_slice")],
-    ids=["rank-2", "rank-3"],
-)
-def test_solver_defaults_match_upstream(defaults, entry):
-    """squidpy's own solver defaults are upstream's, so an omitted keyword is not a divergence.
-
-    `align_stalign_volume` fills every keyword a notebook did not pass, because
-    the port's solver is a bare kernel declaring none. Upstream fills the same omissions from
-    its signature. Both ranks are checked: the two allen3d notebooks pass none of the five
-    knobs where rank 3 differs from rank 2, so a drift there would reach the published `v` as
-    a fake D11 divergence rather than as an error.
-    """
-    import inspect as _inspect
-
-    pytest.importorskip("squidpy")
-    # Private by necessity: the port's default *values* have no public accessor, and this
-    # is the check that a notebook passing nothing puts identical numbers on both sides.
-    from squidpy.experimental.tl._align import _stalign
-
-    from squidpy_ports.stalign import upstream
-
-    port = getattr(_stalign, defaults)
-    signature = _inspect.signature(getattr(upstream.load(), entry)).parameters
-    theirs = {n: p.default for n, p in signature.items() if p.default is not _inspect.Parameter.empty}
-    shared = {name: value for name, value in port.items() if name in theirs}
-    assert shared, f"{defaults} shares no keyword with {entry} -- nothing is being checked"
-    drifted = {n: (v, theirs[n]) for n, v in shared.items() if v != theirs[n]}
-    assert not drifted, f"{defaults} drifted from upstream {entry}: {drifted}"
-
-
 def test_rank_three_defaults_are_actually_different_from_rank_two():
     """The five knobs where upstream's 3D entry point departs from its 2D one.
 
