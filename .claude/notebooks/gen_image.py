@@ -10,16 +10,29 @@ HE_LOAD = """
 import matplotlib.pyplot as plt
 import numpy as np, pandas as pd, spatialdata as sd
 from spatialdata.models import Image2DModel, PointsModel
+from spatialdata.transformations import get_transformation
 from squidpy.experimental.im import rasterize_points
 from squidpy.experimental.tl import align_stalign_image
 
+# `sigmaM`, `sigmaB` and `sigmaA` are in the images' own intensity units, and upstream states
+# its values for both sides mapped onto [0, 1]. A raw density raster of 167k cells has a mean
+# near 3 and a max well above 10, which leaves widths of ~0.1 about a hundred times too tight:
+# the fit then converges on an objective that has stopped measuring the overlap.
+def unit(a):
+    a = np.asarray(a, dtype=float)
+    return (a - a.min()) / np.ptp(a)
+
 def as_image(rgb, key):
     return sd.SpatialData(images={key: Image2DModel.parse(
-        np.moveaxis(rgb, -1, 0).astype(float), dims=('c', 'y', 'x'))})
+        unit(np.moveaxis(rgb, -1, 0)), dims=('c', 'y', 'x'))})
 
 def rasterized(xy, dx):
     sdata = sd.SpatialData(points={'cells': PointsModel.parse(xy)})
     rasterize_points(sdata, 'cells', dx=dx, blur=1.0, key_added='section')
+    element = sdata.images['section']
+    sdata.images['section'] = Image2DModel.parse(
+        unit(np.asarray(element)), dims=('c', 'y', 'x'),
+        transformations={'global': get_transformation(element, 'global')})
     return sdata
 """
 
