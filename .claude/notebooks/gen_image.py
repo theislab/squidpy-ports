@@ -54,15 +54,18 @@ write(
     "docs/notebooks/squidpy-api/xenium-heimage.ipynb",
     [
         md("""
-# Placing Xenium cells on their H&E image
+# Aligning Xenium cells with their H&E image
 
-The same route as [merfish-visium](merfish-visium.ipynb): the cell cloud is rasterized and
-`align_stalign_image` fits image to image, with paired landmarks carrying the correspondence
-that intensity alone cannot.
+`align_stalign_image` fits image to image, so the cell cloud is rasterized first and the H&E is
+matched against that raster. Upstream's equivalent is `xenium-heimage-alignment`.
 
-Upstream's equivalent is `xenium-heimage-alignment`, and it runs the pair the other way round --
-it warps the H&E onto the rasterized cells and then inverts to place the cells. Here the H&E is
-the reference, which is the direction that puts the cells on the image without an inverse.
+**Which side is the reference matters here, and it is not a presentation choice.** The objective
+is computed on the reference's grid. Make the H&E the reference and it is evaluated over 2051 x
+2759 x 3 pixels against a 201 x 276 section -- roughly three hundred times more reference pixels
+than there is section to match -- and the deformation gets driven by H&E texture with no
+counterpart: measured, the landmarks start 16 px apart and the fit walks them out to 524. With
+the raster as the reference the same fit starts at an objective of 14,352 instead of 4,417,134
+and ends *better* than it started. So the rasterized cells are the reference, as upstream has it.
 """),
         md("## Inputs"),
         code(
@@ -72,16 +75,16 @@ he = plt.imread('xenium_data/Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.png')
 cells = pd.read_csv('xenium_data/Xenium_FFPE_Human_Breast_Cancer_Rep1_cells.csv.gz')
 xy = np.c_[cells['x_centroid'], cells['y_centroid']].astype(float)
 
-visium = as_image(he, 'he')
-xenium = rasterized(xy, 30.0)
+image = as_image(he, 'he')
+section = rasterized(xy, 30.0)
 print(f'{len(xy)} cells over {xy[:, 0].max():.0f} x {xy[:, 1].max():.0f} um, '
-      f'rasterized to {tuple(np.asarray(xenium["section"]).shape)}; H&E is {he.shape}')
+      f'rasterized to {tuple(np.asarray(section["section"]).shape)}; H&E is {he.shape}')
 """
         ),
         md("""
-Four landmark pairs, hardcoded upstream. They are stored there as `(y, x)` -- squidpy's public
-API takes `(x, y)`, so each is reversed once on the way in rather than the arrays being
-transposed later.
+Four landmark pairs, hardcoded upstream. They are stored there as `(y, x)`; squidpy's public API
+takes `(x, y)`, so each is reversed once on the way in. Only one reading is even possible --
+read as `(x, y)`, the second H&E point's 2200 would exceed the image's 2051 height.
 """),
         code("""
 landmarks_he = np.array([[1050., 950.], [700., 2200.], [500., 1550.], [1550., 1840.]])[:, ::-1]
@@ -95,31 +98,46 @@ ax[1].set_title('Xenium cells, in microns'); ax[1].invert_yaxis(); ax[1].set_asp
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
 """),
-        md("## The fit\n\nUpstream's own solver values for this pair."),
+        md("""
+## The fit
+
+Upstream's own solver values. `niter=0` is not used here: with the smaller grid as the reference
+it raises `IndexError` inside the initialisation path, so the starting affine cannot be inspected
+the way the volume notebooks inspect theirs.
+"""),
         code("""
 fit = align_stalign_image(
-    visium, xenium, image_key=('he', 'section'),
-    landmarks_ref=landmarks_he, landmarks_query=landmarks_cells,
+    section, image, image_key=('section', 'he'),
+    landmarks_ref=landmarks_cells, landmarks_query=landmarks_he,
     niter=2000, sigmaM=0.15, sigmaB=0.10, sigmaA=0.11, epV=10,
 )
 print(f'{fit.n_iter} iterations, objective '
       f'{float(fit.energies[0]):.0f} -> {float(fit.energies[-1]):.0f}')
-"""),
-        md("## Every cell, placed on the image"),
-        code("""
-placed = np.asarray(fit.transform(xy))
-residual = np.linalg.norm(np.asarray(fit.transform(landmarks_cells)) - landmarks_he, axis=1)
-rows, columns = he.shape[:2]
-inside = ((placed[:, 0] >= 0) & (placed[:, 0] < columns)
-          & (placed[:, 1] >= 0) & (placed[:, 1] < rows))
-print(f'landmark residual: median {np.median(residual):.1f} px, worst {residual.max():.1f} px')
-print(f'{100 * inside.mean():.0f}% of cells land within the {columns} x {rows} image')
 
-fig, ax = plt.subplots(1, 2, figsize=(13, 6))
+residual = np.linalg.norm(np.asarray(fit.transform(landmarks_he)) - landmarks_cells, axis=1)
+print(f'landmark residual: median {np.median(residual):.1f} um, worst {residual.max():.1f} um')
+"""),
+        md("""
+## The two together
+
+`transform` maps the query into the reference frame, which here is H&E pixels into microns --
+the opposite of what a picture of cells-on-tissue wants. `warp_image` supplies the other
+direction: `backward` resamples a reference-frame image onto the query's grid, so the cell
+density lands on the H&E's own pixels. That is the figure upstream publishes for this pair.
+
+Going the other way for *points* -- cells into H&E pixels -- is not available: `transform` only
+runs query to reference, and the public API exposes no inverse for a point set.
+"""),
+        code("""
+density = np.asarray(fit.warp_image(np.asarray(section['section']), direction='backward')).squeeze()
+print(f'density resampled onto the H&E grid: {density.shape}')
+
+fig, ax = plt.subplots(1, 2, figsize=(14, 6))
 ax[0].imshow(he); ax[0].set_title('H&E')
-ax[1].imshow(he); ax[1].scatter(*placed.T, s=0.12, alpha=0.3, c='tab:blue')
-ax[1].scatter(*landmarks_he.T, s=12, c='red', label='target landmarks')
-ax[1].set_title('Xenium cells placed on it'); ax[1].legend(fontsize=8)
+ax[1].imshow(he)
+ax[1].imshow(density, cmap='Blues', alpha=0.45)
+ax[1].scatter(*landmarks_he.T, s=12, c='red', label='landmarks')
+ax[1].set_title('Xenium cell density warped onto it'); ax[1].legend(fontsize=8)
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
 """),
