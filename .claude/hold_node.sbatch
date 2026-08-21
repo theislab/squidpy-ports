@@ -33,6 +33,19 @@ export PATH="$RUN_HOME/.local/bin:${PATH:-/usr/local/bin:/usr/bin:/bin}"
 echo "### host=$(hostname) job=$SLURM_JOB_ID started=$(date --iso-8601=seconds)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
+# Fail fast rather than hold a GPU that cannot do the work. /localscratch is shared with every
+# other user of the node and is not cleaned between jobs: supergpu14 was handed over with
+# 112 KB free of 131 GB, all of it in other users' unreadable directories, so the harness died
+# on `mkdir ... No space left on device` with nothing to prune. Without this check that is a
+# node held for twelve hours and discovered broken on first use.
+FREE_MB="$(df -BM --output=avail /localscratch 2>/dev/null | tail -1 | tr -dc '0-9')"
+echo "### localscratch: ${FREE_MB:-?} MB free of $(df -BG --output=size /localscratch 2>/dev/null | tail -1 | tr -d ' ')"
+if [[ -z "$FREE_MB" || "$FREE_MB" -lt 20000 ]]; then
+    echo "Refusing to hold $(hostname): needs ~20 GB free on /localscratch for the venv and" >&2
+    echo "caches, found ${FREE_MB:-0} MB. Resubmit with --exclude=$(hostname -s)." >&2
+    exit 1
+fi
+
 # Publish the allocation so any session can find and share it.
 cat > "$WORKSPACE/held.json" <<JSON
 {"job_id": "$SLURM_JOB_ID", "node": "$(hostname)", "workspace": "$WORKSPACE",
