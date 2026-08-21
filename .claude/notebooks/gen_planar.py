@@ -211,17 +211,18 @@ print(f'{len(xy)} cells rasterized to {tuple(np.asarray(merfish["section"]).shap
       f'H&E is {he.shape}')
 """),
         md("""
-Landmarks picked on these two, five named regions with several points each. Row order is the
-correspondence, so both sides are flattened in the same key order -- and each side's points are
-in that side's own units, microns against pixels.
+Twelve landmark pairs, matched by row order, each side in its own units -- microns for the
+section, pixels for the H&E. Neither is restated anywhere: the elements carry their placement
+and the solver reads the units off them.
 """),
         code("""
-picked = {side: np.load(f'visium_data/{name}_points.npy', allow_pickle=True).item()
-          for side, name in (('query', 'Merfish_S2_R3'), ('ref', 'tissue_hires_image'))}
-regions = list(picked['ref'])
-paired = {side: np.array([p for r in regions for p in picked[side][r]], dtype=float)
-          for side in picked}
-print(f'{len(paired["ref"])} pairs over {len(regions)} regions: {", ".join(regions)}')
+# Upstream's own pairs for this notebook, twelve of them, stored as `(x, y)` -- which is what
+# squidpy takes, so nothing is transposed on the way in. The region-keyed `.npy` files belong to
+# the point-annotator variant rather than to this one.
+data = np.load('visium_data/visium2_points.npz')
+paired = {'query': np.asarray(data['pointsI'], dtype=float),
+          'ref': np.asarray(data['pointsJ'], dtype=float)}
+print(f'{len(paired["ref"])} landmark pairs')
 
 fig, ax = plt.subplots(1, 2, figsize=(13, 5.5))
 ax[0].scatter(*xy.T, s=0.12, alpha=0.3); ax[0].scatter(*paired['query'].T, s=30, c='red')
