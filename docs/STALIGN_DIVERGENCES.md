@@ -1,7 +1,3 @@
----
-orphan: true
----
-
 ```{note}
 Rows below were measured with the notebook-comparison harness, which replayed upstream's own
 notebooks through internal API and compared every intermediate. That harness has since been

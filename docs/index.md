@@ -1,25 +1,19 @@
 # squidpy-ports
 
-squidpy's `experimental.tl.align` reimplements [STalign](https://github.com/JEFworks-Lab/STalign)'s
-affine + LDDMM alignment in JAX. This site is the evidence that the port is the same algorithm.
+Reference implementations and evidence for squidpy ports: an upstream method reimplemented inside
+squidpy, and what establishes that the reimplementation is the same algorithm.
 
-- **[STalign: squidpy API equivalence](squidpy-api.md)** — sixteen of STalign's seventeen analyses
-  rewritten against squidpy's public API, executed on a GPU, one page per upstream notebook.
-- **[Numerical tests](correctness.md)** — the seeded reference suite that gates the port: what
-  each test asserts, and its result.
+One section per port.
 
-Upstream STalign is pinned throughout to
-[`b2068ed`](https://github.com/JEFworks-Lab/STalign/tree/b2068edc98974efa54537eca194736e177bbe11d),
-and the squidpy fork to
-[`6c4b5ce`](https://github.com/selmanozleyen/squidpy/tree/6c4b5ce93b100f43fe873949aef6446461a276c0).
-Every page names the commit behind its own numbers.
+- **[STalign](stalign.md)** — affine + LDDMM alignment, reimplemented in JAX as
+  `squidpy.experimental.tl.align`. Sixteen of upstream's own analyses rewritten against the public
+  API and executed, plus the seeded reference suite that gates the numerics.
+
 Source: [theislab/squidpy-ports](https://github.com/theislab/squidpy-ports).
 
 ```{toctree}
 :hidden: true
-:maxdepth: 1
+:maxdepth: 2
 
-STalign: squidpy API equivalence <squidpy-api.md>
-Numerical tests <correctness.md>
-Divergence ledger <STALIGN_DIVERGENCES.md>
+STalign <stalign.md>
 ```
