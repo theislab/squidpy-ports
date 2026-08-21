@@ -64,10 +64,14 @@ From: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
     # downloads it per run; fetching it once at build makes the image self-contained and stops
     # every run re-pulling ~40 MB twice over.
     ALLEN=http://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf
-    curl -sSL -o docs/_build/stalign-data/ara_nissl_50.nrrd "$ALLEN/ara_nissl/ara_nissl_50.nrrd"
-    curl -sSL -o docs/_build/stalign-data/annotation_50.nrrd "$ALLEN/annotation/ccf_2017/annotation_50.nrrd"
-    curl -sSL -o docs/_build/stalign-data/allen_ontology.csv \
+    curl -fsSL -o docs/_build/stalign-data/ara_nissl_50.nrrd "$ALLEN/ara_nissl/ara_nissl_50.nrrd"
+    curl -fsSL -o docs/_build/stalign-data/annotation_50.nrrd "$ALLEN/annotation/ccf_2017/annotation_50.nrrd"
+    curl -fsSgL -o docs/_build/stalign-data/allen_ontology.csv \
         "http://api.brain-map.org/api/v2/data/query.csv?criteria=model::Structure,rma::criteria,[ontology_id\$eq1],rma::options[num_rows\$eqall]"
+    for f in ara_nissl_50.nrrd annotation_50.nrrd allen_ontology.csv; do
+        test -s "docs/_build/stalign-data/$f" || { echo "atlas fetch produced no $f" >&2; exit 1; }
+    done
+    ls -l docs/_build/stalign-data/
 
 %environment
     export PATH=/opt/squidpy-ports/.venv/bin:$PATH
