@@ -27,9 +27,9 @@ computed.
    rasterisation and interpolation at the boundaries, not from the fit.
 
 3. **The public API** is covered in squidpy itself by
-   [`test_align_stalign.py`](https://github.com/selmanozleyen/squidpy/blob/5c67ea7/tests/experimental/tl/test_align_stalign.py)
+   [`test_align_stalign.py`](https://github.com/selmanozleyen/squidpy/blob/6d1926a/tests/experimental/tl/test_align_stalign.py)
    and
-   [`test_align_landmarks.py`](https://github.com/selmanozleyen/squidpy/blob/5c67ea7/tests/experimental/tl/test_align_landmarks.py)
+   [`test_align_landmarks.py`](https://github.com/selmanozleyen/squidpy/blob/6d1926a/tests/experimental/tl/test_align_landmarks.py)
    — element layouts and placement, the `stalign_apply_*` write paths in place and into a copy,
    landmark handling, and recovering a known synthetic shift.
 
@@ -39,7 +39,7 @@ file above is linked: none of it has to be taken on faith from a figure.
 
 ## Results
 
-Run against upstream STalign `b2068ed` and squidpy fork `5c67ea7` — the same pinned pair behind
+Run against upstream STalign `b2068ed` and squidpy fork `6d1926a` — the same pinned pair behind
 the figures in the [executed notebooks](squidpy-api.md), so the pictures and the assertions
 describe one environment. Raw pytest output is served beside this page:
 [`squidpy-ports-tests.log`](_static/tests/squidpy-ports-tests.log) and
