@@ -161,6 +161,7 @@ moved rigidly and disagree wherever it deformed. That residual disagreement is e
 """),
         code("""
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 matrix = fits['affine']
 moved = query.obsm['spatial'] @ matrix[:2, :2].T + matrix[:2, 2]
