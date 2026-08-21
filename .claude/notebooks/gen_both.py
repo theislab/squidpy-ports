@@ -28,7 +28,7 @@ UPSTREAM = {
 #: fork branch and are absent from squidpy's published API docs, so an intersphinx role would be
 #: an unresolved reference and `nitpicky = True` plus `-W` would fail the build. Linking to the
 #: source at a pinned revision is clickable, exact, and cannot rot into pointing at something else.
-SQUIDPY_REV = "6d1926a96d16e98764a8ddf695adbaccea638ab8"
+SQUIDPY_REV = "e9a94c4d125fc3ac7b791a8ce6c6ff58e1e885e4"
 _SRC = f"https://github.com/selmanozleyen/squidpy/blob/{SQUIDPY_REV}/src/squidpy"
 API = {
     "rasterize_points": "experimental/im/_rasterize_points.py",

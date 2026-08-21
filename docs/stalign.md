@@ -15,7 +15,7 @@ is the evidence that the port is the same algorithm, in two parts that answer di
 Upstream STalign is pinned throughout to
 [`b2068ed`](https://github.com/JEFworks-Lab/STalign/tree/b2068edc98974efa54537eca194736e177bbe11d),
 and the squidpy fork to
-[`6d1926a`](https://github.com/selmanozleyen/squidpy/tree/6d1926a96d16e98764a8ddf695adbaccea638ab8).
+[`e9a94c4`](https://github.com/selmanozleyen/squidpy/tree/e9a94c4d125fc3ac7b791a8ce6c6ff58e1e885e4).
 Every page names the commit behind its own numbers.
 
 ```{toctree}
