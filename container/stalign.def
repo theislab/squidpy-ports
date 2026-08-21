@@ -47,7 +47,7 @@ From: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
     # Change @<sha> to @feat/experimental-fit-core to track the branch instead. nbclient +
     # ipykernel execute the notebooks.
     uv pip install --python .venv/bin/python \
-        "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@5c67ea76647227f2d758704a2709c9162d318e1c" \
+        "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@6c4b5ce93b100f43fe873949aef6446461a276c0" \
         "jax[cuda12]" nbclient nbformat ipykernel watermark
     # Register a python3 kernel inside the env so the notebook executor finds it.
     .venv/bin/python -m ipykernel install --sys-prefix --name python3 --display-name python3
@@ -57,9 +57,17 @@ From: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
     # present and skips the download, keeping it offline. The link name must match each
     # notebook's expected dir -- xenium omits the `_data` suffix the others use.
     mkdir -p docs/_build/stalign-data
-    ln -sfn /opt/squidpy-ports/vendor/STalign/docs/merfish_data docs/_build/stalign-data/merfish_data
-    ln -sfn /opt/squidpy-ports/vendor/STalign/docs/visium_data  docs/_build/stalign-data/visium_data
-    ln -sfn /opt/squidpy-ports/vendor/STalign/docs/xenium_data  docs/_build/stalign-data/xenium
+    for d in heart_data merfish_data starmap_data visium_data xenium_data; do
+        ln -sfn "/opt/squidpy-ports/vendor/STalign/docs/$d" "docs/_build/stalign-data/$d"
+    done
+    # The two `*-allen3Datlas` notebooks read the Allen atlas from the working directory. Upstream
+    # downloads it per run; fetching it once at build makes the image self-contained and stops
+    # every run re-pulling ~40 MB twice over.
+    ALLEN=http://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf
+    curl -sSL -o docs/_build/stalign-data/ara_nissl_50.nrrd "$ALLEN/ara_nissl/ara_nissl_50.nrrd"
+    curl -sSL -o docs/_build/stalign-data/annotation_50.nrrd "$ALLEN/annotation/ccf_2017/annotation_50.nrrd"
+    curl -sSL -o docs/_build/stalign-data/allen_ontology.csv \
+        "http://api.brain-map.org/api/v2/data/query.csv?criteria=model::Structure,rma::criteria,[ontology_id\$eq1],rma::options[num_rows\$eqall]"
 
 %environment
     export PATH=/opt/squidpy-ports/.venv/bin:$PATH
@@ -91,4 +99,4 @@ PY
 
 %labels
     upstream.stalign b2068edc98974efa54537eca194736e177bbe11d
-    squidpy.fork selmanozleyen/squidpy@5c67ea76647227f2d758704a2709c9162d318e1c
+    squidpy.fork selmanozleyen/squidpy@6c4b5ce93b100f43fe873949aef6446461a276c0
