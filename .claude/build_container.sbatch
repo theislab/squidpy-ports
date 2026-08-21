@@ -20,8 +20,11 @@ mkdir -p "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR"
 
 # Both take an override, so a rebuild does not have to happen in one hardcoded workspace.
 #   sbatch .claude/build_container.sbatch <ports-checkout> <output.sif>
-PORTS="${1:-/lustre/groups/ml01/workspace/$U/stalign-rerun/squidpy-ports}"
-DURABLE="${2:-/lustre/groups/ml01/workspace/$U/stalign-rerun/stalign.sif}"
+# The git clone, not an rsynced tree. Defaulting to the latter built a stale `.def` -- its
+# 22.04 base, against apptainer's GLIBC_2.38 `faked`, plus notebooks that had been deleted --
+# while reporting success on the parts that did run.
+PORTS="${1:-/lustre/groups/ml01/workspace/$U/stalign-3d/ports-clone}"
+DURABLE="${2:-/lustre/groups/ml01/workspace/$U/stalign-3d/stalign.sif}"
 
 echo "### host=$(hostname) job=${SLURM_JOB_ID:-adhoc} localscratch=$LS"
 apptainer --version
