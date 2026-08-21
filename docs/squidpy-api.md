@@ -1,9 +1,11 @@
-# The same alignments, through squidpy's public API
+# squidpy API equivalence
 
-Upstream's notebooks call `STalign.LDDMM` and friends directly, and build their own rasters,
-coordinate axes and initial affines along the way. These are sixteen of those seventeen analyses written
-against squidpy's public API instead — one page per upstream notebook, named after it, so ours can
-be read beside [STalign's own](https://github.com/JEFworks-Lab/STalign/tree/b2068edc98974efa54537eca194736e177bbe11d/docs/notebooks).
+The public API — `squidpy.experimental.tl.align` and the two `experimental.im` helpers it needs —
+is covered by these notebooks. Upstream's own notebooks call `STalign.LDDMM` and friends directly
+and build their rasters, coordinate axes and initial affines by hand along the way; these are
+sixteen of those seventeen analyses written against the public surface instead, one page per
+upstream notebook and named after it, so ours can be read beside
+[STalign's own](https://github.com/JEFworks-Lab/STalign/tree/b2068edc98974efa54537eca194736e177bbe11d/docs/notebooks).
 
 Nothing here reaches into a private module. Four calls cover every case:
 
@@ -13,6 +15,11 @@ Nothing here reaches into a private module. Four calls cover every case:
 | `align_stalign_obs` | two point clouds; it rasterizes both sides itself |
 | `align_stalign_image` | one side is an image, so the other is rasterized onto its grid |
 | `align_stalign_volume` | a 2D section into a 3D reference volume |
+
+Each notebook links the upstream analysis it mirrors, and every function it calls links to its
+source. Where a notebook departs from upstream — a different raster scale, a different starting
+affine, curves resampled so they can be paired at all — it says so at that point in the notebook
+rather than in a list here.
 
 ## A section into a reference volume
 
@@ -54,27 +61,3 @@ notebooks/squidpy-api/xenium-heimage
 The one upstream notebook without an equivalent here is `merfish-merfish-alignment-simulation`,
 which fits a section against a synthetically deformed copy of itself rather than against another
 section.
-
-## What differs from upstream, and why
-
-These are re-expressions, not transcriptions. Where they depart from the upstream notebook, the
-notebook says so in place:
-
-- **Solver values are upstream's own** wherever upstream sets them. The exception is
-  `heart-alignment`, where upstream's `niter=1000` leaves the two sections 1742 → 1587 um apart;
-  the default 5000 closes it to 238. Its other overrides are kept.
-- **`visium-visium-affine-only` reads its spot files with `header=None`.** They carry no header, so
-  a plain `read_csv` promotes the first spot to column names and silently drops it.
-- **`xenium-starmap` puts STARmap into the Xenium frame first** — axes swapped, divided by 5, the
-  new y flipped, as upstream does. Read as-is the clouds sit ~16 mm apart and the affine's
-  translation step is 0.2 units per iteration, so no iteration budget closes it.
-- **`xenium-heimage` runs the pair the other way round.** Upstream warps the H&E onto the
-  rasterized cells and inverts to place them; here the H&E is the reference, which puts the cells
-  on the image without an inverse.
-- **`merfish-visium-with-curve-annotator` resamples its curves.** Upstream's own run of this
-  notebook raises — its two curve files hold 10 and 15 vertices, and paired landmarks are matched
-  by row. Each curve is resampled to a common count along its own arc length, so vertex *k* on one
-  side is the same fraction along the shape as vertex *k* on the other.
-
-Every notebook here was executed on one H100, and the executed copy is what is committed. The
-generators that produce them are in `.claude/notebooks/`.
