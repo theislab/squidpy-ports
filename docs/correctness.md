@@ -1,9 +1,12 @@
-# Numerical tests
+# Tests: numeric and notebook comparison
 
-The [executed notebooks](squidpy-api.md) are real-data evidence, but they are **not** the
-gating check — a figure can look right while the algorithm underneath has drifted. The gate is a
-layered, seeded reference suite: every stage of the algorithm is asserted against values that
-upstream STalign itself computed.
+Two different jobs, and it is worth keeping them apart.
+
+The [executed notebooks](squidpy-api.md) already establish that the results are reasonable — real
+data, real figures, through the public API only. What they cannot establish is that the algorithm
+underneath is upstream's: a figure can look right while the numerics have drifted. That is what
+the seeded reference suite below is for, asserting every stage against values upstream STalign
+itself computed.
 
 ## The three layers
 
@@ -85,3 +88,29 @@ and the script refuses to run otherwise.
 **Reduction order still differs across platforms** (macOS Accelerate vs Linux OpenBLAS). squidpy's
 scheduled job runs on ubuntu, so the committed bundle should be generated on ubuntu too: trigger the
 `generate` workflow and download its artifact rather than committing a bundle built on a laptop.
+
+## Notebook comparison
+
+A second, **development-only** check, and the one that established the foundation in the first
+place: replay each of upstream's own notebooks and compare its every intermediate variable with
+squidpy's, per notebook, per variable. It is what demonstrated the port was the same algorithm
+rather than merely a plausible one — agreement to ~1e-15 on the LDDMM velocity field for the
+rank-2 notebooks, and it is how each row of the [divergence ledger](STALIGN_DIVERGENCES.md) was
+measured rather than argued.
+
+It is not part of the gate, and it is not expected to keep working:
+
+- **It reaches into internal API.** To compare intermediates at all it has to call the same
+  private entry points upstream's notebooks call and read squidpy's internals beside them. Those
+  are free to move; nothing promises otherwise.
+- **It is pinned to a fixed branch.** The comparison was run against one squidpy revision and one
+  upstream revision. Squidpy has moved since, so the harness may well have diverged from what it
+  was written against — a failure there today is as likely to mean the internals were renamed as
+  that anything is wrong.
+- **Its evidence has been retired from this site.** The per-variable tables and the replayed
+  upstream notebooks were 87 MB of pages restating what the ledger already records in a page.
+
+The code is kept because the reference suite borrows from it: `test_stalign_reference.py` issues
+its fits through `notebook_suite`'s own helpers deliberately, so the reference numbers cannot
+drift from the way the fit is actually invoked. Run it with
+`.claude/run_stalign_comparisons.sbatch`; expect to fix internal-API drift first.
