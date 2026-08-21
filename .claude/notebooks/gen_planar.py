@@ -201,6 +201,7 @@ units off it. Upstream's equivalent is `merfish-visium-alignment`.
 import matplotlib.pyplot as plt
 import numpy as np, pandas as pd, spatialdata as sd
 from spatialdata.models import Image2DModel, PointsModel
+from spatialdata.transformations import get_transformation
 from squidpy.experimental.im import rasterize_points
 
 MERFISH = ('merfish_data/datasets_mouse_brain_map_BrainReceptorShowcase'
@@ -208,12 +209,22 @@ MERFISH = ('merfish_data/datasets_mouse_brain_map_BrainReceptorShowcase'
 cells = pd.read_csv(MERFISH)
 xy = np.c_[cells['center_x'], cells['center_y']].astype(float)
 
+# Both sides onto [0, 1], as upstream does: the solver's sigmas are in these units, and a raw
+# density raster spans nothing like the range an image does.
+def unit(a):
+    a = np.asarray(a, dtype=float)
+    return (a - a.min()) / np.ptp(a)
+
 he = plt.imread('visium_data/tissue_hires_image.png')[..., :3]
 visium = sd.SpatialData(images={'he': Image2DModel.parse(
-    np.moveaxis(he, -1, 0).astype(float), dims=('c', 'y', 'x'))})
+    unit(np.moveaxis(he, -1, 0)), dims=('c', 'y', 'x'))})
 
 merfish = sd.SpatialData(points={'cells': PointsModel.parse(xy)})
 rasterize_points(merfish, 'cells', dx=30.0, blur=1.0, key_added='section')
+element = merfish.images['section']
+merfish.images['section'] = Image2DModel.parse(
+    unit(np.asarray(element)), dims=('c', 'y', 'x'),
+    transformations={'global': get_transformation(element, 'global')})
 print(f'{len(xy)} cells rasterized to {tuple(np.asarray(merfish["section"]).shape)}, '
       f'H&E is {he.shape}')
 """),
