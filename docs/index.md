@@ -8,6 +8,7 @@ upstream notebook, and the seeded test suite that actually gates it.
 - **[Visual comparison](stalign-comparison.md)** — three datasets, upstream's figure beside ours.
 - **[Notebook values comparison](parity.md)** — every variable in all 17 upstream notebooks, replayed both ways.
 - **[Numerical tests](correctness.md)** — the seeded reference suite, what each test asserts, and its result.
+- **[The squidpy API](squidpy-api.md)** — all seventeen analyses rewritten against the public API, executed.
 - **[Divergence ledger](STALIGN_DIVERGENCES.md)** — every place the port and the original disagree, measured, with the verdict.
 
 Upstream STalign is pinned throughout to
@@ -25,6 +26,6 @@ Source: [theislab/squidpy-ports](https://github.com/theislab/squidpy-ports).
 
 Visual comparison <stalign-comparison.md>
 Notebook values comparison <parity.md>
-Section into a reference volume <notebooks/squidpy-api/starmap-allen3Datlas>
+The squidpy API <squidpy-api.md>
 Numerical tests <correctness.md>
 ```
