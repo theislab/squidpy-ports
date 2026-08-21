@@ -77,7 +77,7 @@ SPECS = {
         "heart_e2",
         "heart_e1",
         None,
-        "dx=100.0, blur=1.0",
+        "dx=100.0, blur=1.0, epV=1000, sigmaB=0.1",
         "Two serial sections of the same heart. The tissue is far less regular than brain, so "
         "the matching term does most of the work and `sigmaB` is dropped to 0.1 to keep "
         "background from being read as tissue. Upstream caps this one at `niter=1000`, which is not enough: the two sections start 1742 um apart and at the default translation step that budget only closes it to 1587. Leaving `niter` alone -- squidpy's default is 5000, and so is upstream's `LDDMM`'s -- gets it to 238 um. Nothing else needed tuning; it was an iteration budget, not a parameter.",
@@ -87,7 +87,7 @@ SPECS = {
         "heart_c2",
         "heart_d2",
         None,
-        "dx=100.0, blur=1.0",
+        "dx=100.0, blur=1.0, epV=1000, sigmaB=0.1",
         "The same heart pairing, on sections cut at different thicknesses -- so the two differ "
         "in density as well as in shape, and the intensity regression inside the solver has to "
         "absorb the difference before the deformation can be read. Upstream caps this one at `niter=1000`, which is not enough: the two sections start 1742 um apart and at the default translation step that budget only closes it to 1587. Leaving `niter` alone -- squidpy's default is 5000, and so is upstream's `LDDMM`'s -- gets it to 238 um. Nothing else needed tuning; it was an iteration budget, not a parameter.",
@@ -97,7 +97,7 @@ SPECS = {
         "merfish2",
         "merfish3",
         45,
-        "dx=15.0, blur=1.5, diffeo_start=5001",
+        "dx=15.0, blur=1.5, niter=1000, epV=50, diffeo_start=1001",
         "The same pair as `merfish-merfish`, held to an affine. `diffeo_start` is the iteration "
         "at which the velocity field is allowed to start moving; setting it past `niter` means "
         "it never does, so only the affine part is ever fitted.",
@@ -107,7 +107,7 @@ SPECS = {
         "merfish2",
         "merfish3",
         45,
-        "dx=15.0, blur=1.5",
+        "dx=15.0, blur=1.5, niter=10000, epV=50",
         "The same pair again, initialised by an explicit rotation and translation rather than by "
         "landmarks. Upstream's variant exists to show the `L`/`T` entry point; here the rotation "
         "is applied to the coordinates and the fit starts from the identity.",
@@ -117,7 +117,7 @@ SPECS = {
         "xenium_mouse",
         "merfish3",
         None,
-        "dx=15.0, blur=1.5",
+        "dx=15.0, blur=1.5, niter=10000, epV=50",
         "Across technologies: a MERFISH section onto a Xenium one. Nothing in the call changes "
         "for the modality -- both sides are just point clouds in microns.",
     ),
@@ -126,7 +126,7 @@ SPECS = {
         "visium2",
         "visium1",
         None,
-        "dx=1.0, blur=1.0, a=5.0, diffeo_start=5001",
+        "dx=1.0, blur=1.0, niter=1000, a=5.0, diffeo_start=1001",
         "Two Visium sections, spots rather than cells: about 250 points each, and their "
         "coordinates are array indices spanning roughly 6 to 29 rather than microns. Every "
         "length in the solver is in those units, which is why `dx` is 1 and not 30, and why `a` "
@@ -138,7 +138,7 @@ SPECS = {
         "starmap_xenium_frame",
         "xenium_mouse",
         None,
-        "dx=30.0, blur=1.0",
+        "dx=30.0, blur=1.0, niter=4000, epV=50, sigmaM=1.5, sigmaB=1.0, sigmaA=1.5",
         "A STARmap section onto Xenium. The sigmas are upstream's and are wider than the "
         "brain-to-brain cases, because the two do not share a cell-density scale.",
     ),
@@ -147,7 +147,7 @@ SPECS = {
         "xenium_bc1",
         "xenium_bc2",
         None,
-        "dx=30.0, blur=1.0",
+        "dx=30.0, blur=1.0, niter=300, epV=100, sigmaM=1.5, sigmaB=1.0, sigmaA=1.1",
         "Two Xenium replicates of the same breast-cancer block. They overlap only partially, so "
         "some cells have no counterpart at all -- the matching weights are what identify the "
         "supported overlap, and unmatched cells are expected rather than a failure.",
@@ -263,34 +263,26 @@ a partial overlap into something visible, rather than a fit that merely looks ba
 unmatched parts are supposed to be unmatched.
 """),
             code("""
-from scipy.ndimage import map_coordinates
-
-# Which grid the weight raster lives on decides which points can index it, so it is chosen by
-# matching shapes: the mixture is estimated over the target, yet upstream interpolates the same
-# array on the source axes, and a wrong guess silently samples the wrong place.
-def per_cell(weight_field, points):
-    field = np.asarray(weight_field).squeeze()
-    for axes in (fit.ref_axes, fit.query_axes):
-        if axes is not None and field.shape == tuple(len(np.asarray(a)) for a in axes):
-            y, x = (np.asarray(a) for a in axes)
-            rows = (points[:, 1] - y[0]) / (y[1] - y[0])
-            cols = (points[:, 0] - x[0]) / (x[1] - x[0])
-            return map_coordinates(field, np.vstack([rows, cols]), order=1, mode='nearest')
-    raise ValueError(f'no axes match the weight field shape {field.shape}')
-
+# The weights come back as the solver's internal density rasters, and `align_stalign_obs`
+# deliberately returns no axes for them -- "not a frame any real image lives on". Upstream can
+# colour its cells by weight because it rasterizes by hand and keeps the grid; delegating that
+# to squidpy trades the per-cell view for not having to rebuild the grid from `dx` and
+# `raster_expand`, which would be a copy of internals that is wrong if it is half a pixel out.
 for name in ('match_weights', 'artifact_weights', 'background_weights'):
     w = getattr(fit, name)
     print(f'{name}: {None if w is None else np.asarray(w).shape}')
 
-matching = per_cell(fit.match_weights, moved)
-print(f'{100 * (matching > 0.5).mean():.0f}% of the query cells sit where the fit had real '
-      f'support (matching weight > 0.5)')
+matching = np.asarray(fit.match_weights).squeeze()
+print(f'{100 * (matching > 0.5).mean():.0f}% of the target raster is mostly-matching, '
+      f'{100 * (np.asarray(fit.background_weights).squeeze() > 0.5).mean():.0f}% mostly-background')
 
-fig, ax = plt.subplots(figsize=(7, 6))
-dots = ax.scatter(*moved.T, c=matching, s=0.12, vmin=0, vmax=1, cmap='viridis')
-ax.set_title('query cells, coloured by matching weight')
-ax.set_aspect('equal'); ax.invert_yaxis(); ax.set_xticks([]); ax.set_yticks([])
-fig.colorbar(dots, ax=ax, fraction=0.046)
+fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+for a, (w, title) in zip(ax, [(matching, 'matching weight'),
+                              (np.asarray(fit.background_weights).squeeze(), 'background weight')],
+                         strict=True):
+    im = a.imshow(w, cmap='viridis', vmin=0, vmax=1)
+    a.set_title(title); a.set_xticks([]); a.set_yticks([])
+    fig.colorbar(im, ax=a, fraction=0.046)
 """),
             md("""
 The objective's trace. The mixture E step switches on at iteration 50 and the energy changes

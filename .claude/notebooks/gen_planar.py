@@ -61,7 +61,7 @@ from squidpy.experimental.tl import align_stalign_obs
 fit = align_stalign_obs(
     ref, query, spatial_key='spatial',
     landmarks_ref=landmarks[2], landmarks_query=landmarks[3],
-    dx=30.0, blur=1.5,
+    dx=30.0, blur=1.5, niter=10000, epV=50,
 )
 print(f'{fit.n_iter} iterations, objective '
       f'{float(fit.energies[0]):.0f} -> {float(fit.energies[-1]):.0f}')
