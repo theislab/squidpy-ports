@@ -75,6 +75,7 @@ comparison -- the difference between the two is what the diffeomorphism bought.
 """),
         code("""
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from squidpy.experimental.tl import align_landmarks
 
 moved = np.asarray(fit.transform(query.obsm['spatial']))
@@ -90,7 +91,9 @@ for a, (pts, title) in zip(ax, [
     a.scatter(*pts.T, s=0.12, alpha=0.3, label='query (S2R3)')
     a.set_title(title); a.set_aspect('equal'); a.invert_yaxis()
     a.set_xticks([]); a.set_yticks([])
-ax[0].legend(markerscale=90, loc='lower left', fontsize=8)
+ax[0].legend(handles=[Line2D([], [], marker='o', ls='', ms=5, color=c, label=l)
+                     for c, l in (('tab:blue', 'reference (S2R2)'), ('tab:orange', 'query (S2R3)'))],
+             loc='lower left', fontsize=8)
 """),
         md("""
 The objective's own trace. As in the volume notebooks, the mixture E step switches on at
@@ -169,8 +172,11 @@ for a, (pts, title) in zip(ax, [(query.obsm['spatial'], 'before'),
     a.scatter(*pts.T, s=0.12, alpha=0.3, label='query (S2R3)')
     a.set_title(title); a.set_aspect('equal'); a.invert_yaxis()
     a.set_xticks([]); a.set_yticks([])
-ax[0].scatter(*landmarks[2].T, s=40, c='k', marker='x', label='landmarks')
-ax[0].legend(markerscale=40, loc='lower left', fontsize=8)
+ax[0].scatter(*landmarks[2].T, s=12, c='k', marker='x')
+ax[0].legend(handles=[Line2D([], [], marker='o', ls='', ms=5, color='tab:blue', label='reference (S2R2)'),
+                      Line2D([], [], marker='o', ls='', ms=5, color='tab:orange', label='query (S2R3)'),
+                      Line2D([], [], marker='x', ls='', ms=5, color='k', label='landmarks')],
+             loc='lower left', fontsize=8)
 """),
     ],
 )
@@ -225,9 +231,9 @@ paired = {'query': np.asarray(data['pointsI'], dtype=float),
 print(f'{len(paired["ref"])} landmark pairs')
 
 fig, ax = plt.subplots(1, 2, figsize=(13, 5.5))
-ax[0].scatter(*xy.T, s=0.12, alpha=0.3); ax[0].scatter(*paired['query'].T, s=30, c='red')
+ax[0].scatter(*xy.T, s=0.12, alpha=0.3); ax[0].scatter(*paired['query'].T, s=12, c='red')
 ax[0].set_title('MERFISH section, in microns'); ax[0].invert_yaxis(); ax[0].set_aspect('equal')
-ax[1].imshow(he); ax[1].scatter(*paired['ref'].T, s=30, c='red')
+ax[1].imshow(he); ax[1].scatter(*paired['ref'].T, s=12, c='red')
 ax[1].set_title('Visium H&E, in pixels')
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
@@ -281,7 +287,7 @@ fig, ax = plt.subplots(1, 2, figsize=(13, 6))
 ax[0].imshow(he); ax[0].set_title('Visium H&E')
 ax[1].imshow(he)
 ax[1].scatter(*placed.T, s=0.12, alpha=0.3, c='tab:blue')
-ax[1].scatter(*paired['ref'].T, s=30, c='red', label='target landmarks')
+ax[1].scatter(*paired['ref'].T, s=12, c='red', label='target landmarks')
 ax[1].set_title('MERFISH cells placed on it'); ax[1].legend(fontsize=8)
 for a in ax:
     a.set_xticks([]); a.set_yticks([])

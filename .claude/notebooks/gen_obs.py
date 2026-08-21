@@ -228,6 +228,7 @@ at the nearest raster cell.
 """),
             code("""
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from scipy.spatial import cKDTree
 
 moved = np.asarray(fit.transform(query.obsm['spatial']))
@@ -251,38 +252,9 @@ for a, (pts, title) in zip(ax, [(query.obsm['spatial'], 'before'),
     a.scatter(*pts.T, s=0.12, alpha=0.3, label='query')
     a.set_title(title); a.set_aspect('equal'); a.invert_yaxis()
     a.set_xticks([]); a.set_yticks([])
-ax[0].legend(markerscale=90, loc='lower left', fontsize=8)
-"""),
-            md("""
-## Which cells the fit could actually use
-
-Two sections rarely cover the same tissue. The solver splits the target into three classes as
-it goes -- matching, artifact and background -- and reweights them every iteration, so regions
-with no counterpart stop pulling on the deformation. Reading those weights back is what turns
-a partial overlap into something visible, rather than a fit that merely looks bad: the
-unmatched parts are supposed to be unmatched.
-"""),
-            code("""
-# The weights come back as the solver's internal density rasters, and `align_stalign_obs`
-# deliberately returns no axes for them -- "not a frame any real image lives on". Upstream can
-# colour its cells by weight because it rasterizes by hand and keeps the grid; delegating that
-# to squidpy trades the per-cell view for not having to rebuild the grid from `dx` and
-# `raster_expand`, which would be a copy of internals that is wrong if it is half a pixel out.
-for name in ('match_weights', 'artifact_weights', 'background_weights'):
-    w = getattr(fit, name)
-    print(f'{name}: {None if w is None else np.asarray(w).shape}')
-
-matching = np.asarray(fit.match_weights).squeeze()
-print(f'{100 * (matching > 0.5).mean():.0f}% of the target raster is mostly-matching, '
-      f'{100 * (np.asarray(fit.background_weights).squeeze() > 0.5).mean():.0f}% mostly-background')
-
-fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-for a, (w, title) in zip(ax, [(matching, 'matching weight'),
-                              (np.asarray(fit.background_weights).squeeze(), 'background weight')],
-                         strict=True):
-    im = a.imshow(w, cmap='viridis', vmin=0, vmax=1)
-    a.set_title(title); a.set_xticks([]); a.set_yticks([])
-    fig.colorbar(im, ax=a, fraction=0.046)
+ax[0].legend(handles=[Line2D([], [], marker='o', ls='', ms=5, color=c, label=l)
+                     for c, l in (('tab:blue', 'reference'), ('tab:orange', 'query'))],
+             loc='lower left', fontsize=8)
 """),
             md("""
 The objective's trace. The mixture E step switches on at iteration 50 and the energy changes

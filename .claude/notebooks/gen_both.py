@@ -74,6 +74,7 @@ def tail(section_title, initial_title):
         md(TAIL_MD_FIT),
         code("""
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 # Upstream's gate, not a tuning knob: `STalign.py:1233` starts the mixture E step at 50.
 MIXTURE_GATE = 50
@@ -137,7 +138,9 @@ for region in keep:
     m = (acronym == region).to_numpy()
     ax.scatter(xy[m, 0], xy[m, 1], s=0.08, label=region)
 ax.invert_yaxis(); ax.set_aspect('equal')
-ax.legend(markerscale=60, fontsize=6, ncol=2, loc='center left', bbox_to_anchor=(1, 0.5))
+ax.legend(handles=[Line2D([], [], marker='o', ls='', ms=4, color=h.get_facecolor()[0], label=r)
+                   for r, h in zip(keep, ax.collections, strict=True)],
+          fontsize=6, ncol=2, loc='center left', bbox_to_anchor=(1, 0.5))
 """),
     ]
 

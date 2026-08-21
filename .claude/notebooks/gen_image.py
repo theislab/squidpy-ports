@@ -75,9 +75,9 @@ landmarks_he = np.array([[1050., 950.], [700., 2200.], [500., 1550.], [1550., 18
 landmarks_cells = np.array([[3108., 2100.], [4480., 6440.], [5040., 4200.], [1260., 5320.]])[:, ::-1]
 
 fig, ax = plt.subplots(1, 2, figsize=(13, 5.5))
-ax[0].imshow(he); ax[0].scatter(*landmarks_he.T, s=40, c='red')
+ax[0].imshow(he); ax[0].scatter(*landmarks_he.T, s=12, c='red')
 ax[0].set_title('H&E, in pixels')
-ax[1].scatter(*xy.T, s=0.12, alpha=0.3); ax[1].scatter(*landmarks_cells.T, s=40, c='red')
+ax[1].scatter(*xy.T, s=0.12, alpha=0.3); ax[1].scatter(*landmarks_cells.T, s=12, c='red')
 ax[1].set_title('Xenium cells, in microns'); ax[1].invert_yaxis(); ax[1].set_aspect('equal')
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
@@ -105,7 +105,7 @@ print(f'{100 * inside.mean():.0f}% of cells land within the {columns} x {rows} i
 fig, ax = plt.subplots(1, 2, figsize=(13, 6))
 ax[0].imshow(he); ax[0].set_title('H&E')
 ax[1].imshow(he); ax[1].scatter(*placed.T, s=0.12, alpha=0.3, c='tab:blue')
-ax[1].scatter(*landmarks_he.T, s=40, c='red', label='target landmarks')
+ax[1].scatter(*landmarks_he.T, s=12, c='red', label='target landmarks')
 ax[1].set_title('Xenium cells placed on it'); ax[1].legend(fontsize=8)
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
@@ -186,7 +186,7 @@ print(f'landmark residual: median {np.median(residual):.1f} px, worst {residual.
 print(f'{100 * inside.mean():.0f}% of cells land within the {columns} x {rows} image')
 
 fig, ax = plt.subplots(1, 2, figsize=(13, 6))
-ax[0].imshow(he); ax[0].scatter(*paired['ref'].T, s=30, c='red')
+ax[0].imshow(he); ax[0].scatter(*paired['ref'].T, s=12, c='red')
 ax[0].set_title('Visium H&E with its annotated points')
 ax[1].imshow(he); ax[1].scatter(*placed.T, s=0.12, alpha=0.3, c='tab:blue')
 ax[1].set_title('MERFISH cells placed on it')
@@ -256,9 +256,9 @@ paired = {side: np.vstack([resampled(traced[side][name], PER_CURVE) for name in 
 print(f'{len(paired["ref"])} pairs from {len(traced["ref"])} curves at {PER_CURVE} points each')
 
 fig, ax = plt.subplots(1, 2, figsize=(13, 5.5))
-ax[0].imshow(he); ax[0].scatter(*paired['ref'].T, s=18, c='red')
+ax[0].imshow(he); ax[0].scatter(*paired['ref'].T, s=12, c='red')
 ax[0].set_title('Visium H&E, curves resampled')
-ax[1].scatter(*xy.T, s=0.12, alpha=0.3); ax[1].scatter(*paired['query'].T, s=18, c='red')
+ax[1].scatter(*xy.T, s=0.12, alpha=0.3); ax[1].scatter(*paired['query'].T, s=12, c='red')
 ax[1].set_title('MERFISH section, curves resampled')
 ax[1].invert_yaxis(); ax[1].set_aspect('equal')
 for a in ax:
@@ -286,7 +286,7 @@ print(f'landmark residual: median {np.median(residual):.1f} px, worst {residual.
 print(f'{100 * inside.mean():.0f}% of cells land within the {columns} x {rows} image')
 
 fig, ax = plt.subplots(1, 2, figsize=(13, 6))
-ax[0].imshow(he); ax[0].scatter(*paired['ref'].T, s=18, c='red')
+ax[0].imshow(he); ax[0].scatter(*paired['ref'].T, s=12, c='red')
 ax[0].set_title('Visium H&E')
 ax[1].imshow(he); ax[1].scatter(*placed.T, s=0.12, alpha=0.3, c='tab:blue')
 ax[1].set_title('MERFISH cells placed on it')
