@@ -1,0 +1,70 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          cache-dependency-glob: pyproject.toml
+      # Same command ReadTheDocs runs, so a green build here means a green build there.
+      # `-W` is in the hatch script: a warning fails this job rather than shipping a broken page.
+      - name: Build the site
+        run: uvx hatch run docs:build
+      # The notebooks arrive pre-executed and their outputs are what the pages show, so a page
+      # without figures means something upstream of here blanked them. Cheaper to catch now
+      # than to publish a site of empty notebooks.
+      - name: Every notebook page has its figures
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          pages = sorted(pathlib.Path("docs/_build/html/notebooks/squidpy-api").glob("*.html"))
+          if not pages:
+              sys.exit("no squidpy-api pages were built")
+          empty = [p.name for p in pages
+                   if not re.search(r'<img[^>]+(?:_images/|data:image/png)', p.read_text("utf-8"))]
+          print(f"{len(pages)} pages built, {len(empty)} without figures")
+          if empty:
+              sys.exit("pages with no figures: " + ", ".join(empty))
+          PY
+      - name: Stop Pages treating _static and _images as Jekyll internals
+        run: touch docs/_build/html/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  deploy:
+    # Pages needs one manual switch: Settings -> Pages -> Source = GitHub Actions. Until then
+    # this job is the only part that fails, and `build` still gates every push.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
