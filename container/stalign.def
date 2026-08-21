@@ -47,7 +47,7 @@ From: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
     # Change @<sha> to @feat/experimental-fit-core to track the branch instead. nbclient +
     # ipykernel execute the notebooks.
     uv pip install --python .venv/bin/python \
-        "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@6c4b5ce93b100f43fe873949aef6446461a276c0" \
+        "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@5c67ea76647227f2d758704a2709c9162d318e1c" \
         "jax[cuda12]" nbclient nbformat ipykernel watermark
     # Register a python3 kernel inside the env so the notebook executor finds it.
     .venv/bin/python -m ipykernel install --sys-prefix --name python3 --display-name python3
@@ -91,4 +91,4 @@ PY
 
 %labels
     upstream.stalign b2068edc98974efa54537eca194736e177bbe11d
-    squidpy.fork selmanozleyen/squidpy@6c4b5ce93b100f43fe873949aef6446461a276c0
+    squidpy.fork selmanozleyen/squidpy@5c67ea76647227f2d758704a2709c9162d318e1c

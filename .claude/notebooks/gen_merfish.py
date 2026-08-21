@@ -81,7 +81,7 @@ the next cell checks the initialisation directly, so it is left out here rather 
 reintroducing a hand-built affine to carry it.
 """),
     code("""
-from squidpy.experimental.tl import align_stalign_volume
+from squidpy.experimental.tl import align_stalign_volume, stalign_deformation_grid, stalign_transform_points
 
 slice_index, rotation, scale = 177, 0.0, 0.9
 
@@ -112,8 +112,8 @@ guess = align_stalign_volume(
         + """
 # A fit reports the reference axes it read off the element, so the depth of the chosen slice
 # needs no second derivation from the NRRD header -- and cannot disagree with the one used.
-z_axis = np.asarray(guess.ref_axes[0])
-initial_depth = np.asarray(guess.transform(xy))[:, 2]
+z_axis = np.asarray(guess['ref_axes'][0])
+initial_depth = np.asarray(stalign_transform_points(guess, xy))[:, 2]
 print(f'initial guess places the section at z = {initial_depth.mean():.0f} um '
       f'(slice {slice_index} sits at {z_axis[slice_index]:.0f} um)')
 """
@@ -123,8 +123,8 @@ fit = align_stalign_volume(
     sdata, image_key=('atlas', 'section'), niter=2000,
     initial_slice=slice_index, initial_rotation=rotation, initial_scale=scale, **SOLVER,
 )
-print(f'{fit.n_iter} iterations, objective '
-      f'{float(fit.energies[0]):.0f} -> {float(fit.energies[-1]):.0f}')
+print(f'{fit["n_iter"]} iterations, objective '
+      f'{float(fit["energies"][0]):.0f} -> {float(fit["energies"][-1]):.0f}')
 """),
 ] + tail("MERFISH section", "atlas at the initial guess")
 

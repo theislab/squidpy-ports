@@ -2,7 +2,7 @@
 
 The executed notebooks are produced by **one container**, from **pinned, public sources** —
 no sibling checkout, no environment tricks. It bundles this repository, the
-pinned squidpy JAX port (`selmanozleyen/squidpy@6c4b5ce`), the pinned upstream STalign
+pinned squidpy JAX port (`selmanozleyen/squidpy@5c67ea7`), the pinned upstream STalign
 submodule (`b2068ed`) with its datasets, and the notebooks themselves. Anyone with a GPU box
 and Apptainer can rebuild any result.
 
@@ -48,7 +48,7 @@ carries the figures it produced. The squidpy commit is the one pinned in this co
 | Component | Pin | Source |
 |---|---|---|
 | Upstream STalign | `b2068edc98974efa54537eca194736e177bbe11d` | submodule, baked in |
-| squidpy JAX port | `selmanozleyen/squidpy@6c4b5ce` (`feat/experimental-fit-core`) | installed from git at build |
+| squidpy JAX port | `selmanozleyen/squidpy@5c67ea7` (`feat/experimental-fit-core`) | installed from git at build |
 | squidpy-ports | this checkout | `%files` at build |
 
 ## CPU-only

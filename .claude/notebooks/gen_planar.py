@@ -56,21 +56,22 @@ them rather than merely started there.
 30 um and 1.5, and `epV=50` is its one departure from the solver defaults.
 """),
         code("""
-from squidpy.experimental.tl import align_stalign_obs
+from squidpy.experimental.tl import align_stalign_obs, stalign_apply_transform
 
 fit = align_stalign_obs(
     ref, query, spatial_key='spatial',
     landmarks_ref=landmarks[2], landmarks_query=landmarks[3],
     dx=30.0, blur=1.5, niter=10000, epV=50,
 )
-print(f'{fit.n_iter} iterations, objective '
-      f'{float(fit.energies[0]):.0f} -> {float(fit.energies[-1]):.0f}')
+print(f'{fit["n_iter"]} iterations, objective '
+      f'{float(fit["energies"][0]):.0f} -> {float(fit["energies"][-1]):.0f}')
 """),
         md("""
 ## Where the cells land
 
-`transform` evaluates the fitted map at each point, so a cell lands where it lands rather than
-at the nearest raster cell. The middle panel is what the landmark affine alone achieves, for
+`stalign_apply_transform` writes the mapped coordinates straight back into the query's `obsm`,
+so the alignment ends up on the object rather than in a local variable. It evaluates the fitted
+map at each point, so a cell lands where it lands rather than at the nearest raster cell. The middle panel is what the landmark affine alone achieves, for
 comparison -- the difference between the two is what the diffeomorphism bought.
 """),
         code("""
@@ -78,7 +79,8 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from squidpy.experimental.tl import align_landmarks
 
-moved = np.asarray(fit.transform(query.obsm['spatial']))
+stalign_apply_transform(fit, query, key_added='aligned')
+moved = query.obsm['aligned']
 affine = align_landmarks(landmarks[2], landmarks[3], fit='affine')
 affine_only = query.obsm['spatial'] @ affine[:2, :2].T + affine[:2, 2]
 
@@ -102,7 +104,7 @@ is one function.
 """),
         code("""
 MIXTURE_GATE = 50
-energies = np.asarray(fit.energies)[: fit.n_iter]
+energies = np.asarray(fit['energies'])[: fit['n_iter']]
 descent = energies[MIXTURE_GATE + 1 :]
 tail = descent[-len(descent) // 10 :]
 print(f'after the gate: {descent[0]:.0f} -> {descent[-1]:.0f}, minimum {descent.min():.0f} '
@@ -258,7 +260,7 @@ matters more here than in the point-cloud case: the two modalities do not share 
 scale, so the landmarks carry much of the correspondence.
 """),
         code("""
-from squidpy.experimental.tl import align_stalign_image
+from squidpy.experimental.tl import align_stalign_image, stalign_transform_points
 
 fit = align_stalign_image(
     visium, merfish, image_key=('he', 'section'),
@@ -266,8 +268,8 @@ fit = align_stalign_image(
     niter=200, sigmaM=0.2, sigmaB=0.19, sigmaA=0.3, sigmaP=2e-1,
     epL=5e-11, epT=5e-4, epV=5e1,
 )
-print(f'{fit.n_iter} iterations, objective '
-      f'{float(fit.energies[0]):.0f} -> {float(fit.energies[-1]):.0f}')
+print(f'{fit["n_iter"]} iterations, objective '
+      f'{float(fit["energies"][0]):.0f} -> {float(fit["energies"][-1]):.0f}')
 """),
         md("""
 ## Every cell, placed on the image
@@ -283,8 +285,8 @@ along by the deformation alone, with nothing to match against. The fraction of c
 inside the image is the number that actually describes the situation.
 """),
         code("""
-placed = np.asarray(fit.transform(xy))
-moved_landmarks = np.asarray(fit.transform(paired['query']))
+placed = np.asarray(stalign_transform_points(fit, xy))
+moved_landmarks = np.asarray(stalign_transform_points(fit, paired['query']))
 residual = np.linalg.norm(moved_landmarks - paired['ref'], axis=1)
 print(f'landmark residual after fitting: median {np.median(residual):.1f} px, '
       f'worst {residual.max():.1f} px')

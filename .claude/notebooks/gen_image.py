@@ -12,7 +12,7 @@ import numpy as np, pandas as pd, spatialdata as sd
 from spatialdata.models import Image2DModel, PointsModel
 from spatialdata.transformations import get_transformation
 from squidpy.experimental.im import rasterize_points
-from squidpy.experimental.tl import align_stalign_image
+from squidpy.experimental.tl import align_stalign_image, stalign_transform_points
 
 # `sigmaM`, `sigmaB` and `sigmaA` are in the images' own intensity units, and upstream states
 # its values for both sides mapped onto [0, 1]. A raw density raster of 167k cells has a mean
@@ -38,7 +38,7 @@ def rasterized(xy, dx):
 
 TRACE = """
 MIXTURE_GATE = 50
-energies = np.asarray(fit.energies)[: fit.n_iter]
+energies = np.asarray(fit['energies'])[: fit['n_iter']]
 descent = energies[MIXTURE_GATE + 1 :]
 tail = descent[-max(len(descent) // 10, 1) :]
 print(f'after the gate: {descent[0]:.0f} -> {descent[-1]:.0f}, minimum {descent.min():.0f} '
@@ -111,21 +111,21 @@ fit = align_stalign_image(
     landmarks_ref=landmarks_cells, landmarks_query=landmarks_he,
     niter=2000, sigmaM=0.15, sigmaB=0.10, sigmaA=0.11, epV=10,
 )
-print(f'{fit.n_iter} iterations, objective '
-      f'{float(fit.energies[0]):.0f} -> {float(fit.energies[-1]):.0f}')
+print(f'{fit["n_iter"]} iterations, objective '
+      f'{float(fit["energies"][0]):.0f} -> {float(fit["energies"][-1]):.0f}')
 
-residual = np.linalg.norm(np.asarray(fit.transform(landmarks_he)) - landmarks_cells, axis=1)
+residual = np.linalg.norm(np.asarray(stalign_transform_points(fit, landmarks_he)) - landmarks_cells, axis=1)
 print(f'landmark residual: median {np.median(residual):.1f} um, worst {residual.max():.1f} um')
 """),
         md("""
 ## The two together
 
-`transform` maps the query into the reference frame, which here is H&E pixels into microns --
-the opposite of what a picture of cells-on-tissue wants. `warp_image` supplies the other
+`stalign_transform_points` maps the query into the reference frame, which here is H&E pixels into microns --
+the opposite of what a picture of cells-on-tissue wants. `stalign_warp_image` supplies the other
 direction: `backward` resamples a reference-frame image onto the query's grid, so the cell
 density lands on the H&E's own pixels. That is the figure upstream publishes for this pair.
 
-Going the other way for *points* -- cells into H&E pixels -- is not available: `transform` only
+Going the other way for *points* -- cells into H&E pixels -- is not available: `stalign_transform_points` only
 runs query to reference, and the public API exposes no inverse for a point set.
 """),
         code("""
@@ -136,11 +136,13 @@ def physical_axes(element):
                  for k, a in enumerate(('y', 'x')))
 
 # The fit runs on upstream's dx=30 raster -- 201 x 276 -- and resampling that onto 2051 x 2759
-# is a tenfold upsample, so it arrives soft no matter how it is drawn. `warp_image` takes
+# is a tenfold upsample, so it arrives soft no matter how it is drawn. `stalign_warp_image` takes
 # explicit axes for exactly this: the same fitted deformation can carry a finer raster, which
 # has the detail to survive the trip. The fit is unchanged; only what is pushed through it is.
+from squidpy.experimental.tl import stalign_warp_image
+
 display = rasterized(xy, 8.0)
-density = np.asarray(fit.warp_image(
+density = np.asarray(stalign_warp_image(fit,
     np.asarray(display['section']), direction='backward',
     ref_axes=physical_axes(display['section']))).squeeze()
 print(f'fitted on {tuple(np.asarray(section["section"]).shape)}, '
@@ -215,8 +217,8 @@ fit = align_stalign_image(
     niter=200, sigmaM=0.18, sigmaB=0.18, sigmaA=0.18, sigmaP=2e-1,
     epL=5e-11, epT=5e-4, epV=5e1,
 )
-print(f'{fit.n_iter} iterations, objective '
-      f'{float(fit.energies[0]):.0f} -> {float(fit.energies[-1]):.0f}')
+print(f'{fit["n_iter"]} iterations, objective '
+      f'{float(fit["energies"][0]):.0f} -> {float(fit["energies"][-1]):.0f}')
 """),
         md("""
 ## Every cell, placed on the image
@@ -226,8 +228,8 @@ has no tissue to land on. All the landmarks sit on the covered half, which is wh
 below is small whatever happens to the other one.
 """),
         code("""
-placed = np.asarray(fit.transform(xy))
-residual = np.linalg.norm(np.asarray(fit.transform(paired['query'])) - paired['ref'], axis=1)
+placed = np.asarray(stalign_transform_points(fit, xy))
+residual = np.linalg.norm(np.asarray(stalign_transform_points(fit, paired['query'])) - paired['ref'], axis=1)
 rows, columns = he.shape[:2]
 inside = ((placed[:, 0] >= 0) & (placed[:, 0] < columns)
           & (placed[:, 1] >= 0) & (placed[:, 1] < rows))
@@ -321,13 +323,13 @@ fit = align_stalign_image(
     niter=200, sigmaM=0.18, sigmaB=0.18, sigmaA=0.18, sigmaP=2e-1,
     epL=5e-11, epT=5e-4, epV=5e1,
 )
-print(f'{fit.n_iter} iterations, objective '
-      f'{float(fit.energies[0]):.0f} -> {float(fit.energies[-1]):.0f}')
+print(f'{fit["n_iter"]} iterations, objective '
+      f'{float(fit["energies"][0]):.0f} -> {float(fit["energies"][-1]):.0f}')
 """),
         md("## Every cell, placed on the image"),
         code("""
-placed = np.asarray(fit.transform(xy))
-residual = np.linalg.norm(np.asarray(fit.transform(paired['query'])) - paired['ref'], axis=1)
+placed = np.asarray(stalign_transform_points(fit, xy))
+residual = np.linalg.norm(np.asarray(stalign_transform_points(fit, paired['query'])) - paired['ref'], axis=1)
 rows, columns = he.shape[:2]
 inside = ((placed[:, 0] >= 0) & (placed[:, 0] < columns)
           & (placed[:, 1] >= 0) & (placed[:, 1] < rows))

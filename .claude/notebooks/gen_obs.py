@@ -216,26 +216,28 @@ diffeomorphism straight between two point clouds, rasterizing both sides itself.
             code(load),
             md("## The fit\n\nUpstream's own solver values, and squidpy's defaults for everything else."),
             code(f"""
-from squidpy.experimental.tl import align_stalign_obs
+from squidpy.experimental.tl import align_stalign_obs, stalign_apply_transform
 
 fit = align_stalign_obs(
     {fit_args}
 )
-print(f'{{fit.n_iter}} iterations, objective '
-      f'{{float(fit.energies[0]):.0f}} -> {{float(fit.energies[-1]):.0f}}')
+print(f'{{fit["n_iter"]}} iterations, objective '
+      f'{{float(fit["energies"][0]):.0f}} -> {{float(fit["energies"][-1]):.0f}}')
 """),
             md("""
 ## Where the cells land
 
-`transform` evaluates the fitted map at each point, so a cell lands where it lands rather than
-at the nearest raster cell.
+`stalign_apply_transform` writes the mapped coordinates straight back into the query's `obsm`,
+so the alignment ends up on the object rather than in a local variable. It evaluates the fitted
+map at each point, so a cell lands where it lands rather than at the nearest raster cell.
 """),
             code("""
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from scipy.spatial import cKDTree
 
-moved = np.asarray(fit.transform(query.obsm['spatial']))
+stalign_apply_transform(fit, query, key_added='aligned')
+moved = query.obsm['aligned']
 
 # Whether the fit worked, in the units of the data rather than of the objective. The energy
 # can halve while the sections stay as far apart as they started -- that is what an iteration
@@ -266,7 +268,7 @@ definition there, so only the part after the dashed line is one function.
 """),
             code("""
 MIXTURE_GATE = 50
-energies = np.asarray(fit.energies)[: fit.n_iter]
+energies = np.asarray(fit['energies'])[: fit['n_iter']]
 descent = energies[MIXTURE_GATE + 1 :]
 tail = descent[-max(len(descent) // 10, 1) :]
 print(f'after the gate: {descent[0]:.0f} -> {descent[-1]:.0f}, minimum {descent.min():.0f} '

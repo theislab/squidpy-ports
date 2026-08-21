@@ -8,7 +8,7 @@ cells = [
 # Placing a STARmap section in the Allen CCF
 
 A 2D section fitted into a 3D reference volume, entirely through squidpy's public API:
-`rasterize_points` -> `align_stalign_volume` -> `Stalign3DResult.transform` -> `sample_volume`.
+`rasterize_points` -> `align_stalign_volume` -> `stalign_transform_points` -> `sample_volume`.
 """),
     md("""
 ## Inputs
@@ -89,7 +89,7 @@ print(f'section now spans {section.min():.2f} to {section.max():.2f}, mean {sect
 the full 3D deformation is fitted, so the section need not be exactly coronal.
 """),
     code("""
-from squidpy.experimental.tl import align_stalign_volume
+from squidpy.experimental.tl import align_stalign_volume, stalign_deformation_grid, stalign_transform_points
 
 def physical_axes(element, axes):
     matrix = get_transformation(element, 'global').to_affine_matrix(input_axes=axes, output_axes=axes)
@@ -141,7 +141,7 @@ guess = align_stalign_volume(
 """
         + GUESS_TAIL
         + """
-initial_depth = np.asarray(guess.transform(xy))[:, 2]
+initial_depth = np.asarray(stalign_transform_points(guess, xy))[:, 2]
 print(f'initial guess places the section at z = {initial_depth.mean():.0f} um '
       f'(slice {slice_index} sits at {z_axis[slice_index]:.0f} um)')
 """
@@ -150,8 +150,8 @@ print(f'initial guess places the section at z = {initial_depth.mean():.0f} um '
 fit = align_stalign_volume(
     sdata, image_key=('atlas', 'section'), initial_affine=initial_affine, niter=800, **SOLVER
 )
-print(f'{fit.n_iter} iterations, objective '
-      f'{float(fit.energies[0]):.0f} -> {float(fit.energies[-1]):.0f}')
+print(f'{fit["n_iter"]} iterations, objective '
+      f'{float(fit["energies"][0]):.0f} -> {float(fit["energies"][-1]):.0f}')
 """),
 ] + tail("STARmap section", "atlas at the initial guess")
 

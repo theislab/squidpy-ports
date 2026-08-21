@@ -28,7 +28,7 @@ UPSTREAM = {
 #: fork branch and are absent from squidpy's published API docs, so an intersphinx role would be
 #: an unresolved reference and `nitpicky = True` plus `-W` would fail the build. Linking to the
 #: source at a pinned revision is clickable, exact, and cannot rot into pointing at something else.
-SQUIDPY_REV = "6c4b5ce93b100f43fe873949aef6446461a276c0"
+SQUIDPY_REV = "5c67ea76647227f2d758704a2709c9162d318e1c"
 _SRC = f"https://github.com/selmanozleyen/squidpy/blob/{SQUIDPY_REV}/src/squidpy"
 API = {
     "rasterize_points": "experimental/im/_rasterize_points.py",
@@ -37,6 +37,11 @@ API = {
     "align_stalign_image": "experimental/tl/_align/_api.py",
     "align_stalign_volume": "experimental/tl/_align/_api.py",
     "align_landmarks": "experimental/tl/_align/_api.py",
+    "stalign_apply_transform": "experimental/tl/_align/_api.py",
+    "stalign_apply_warp": "experimental/tl/_align/_api.py",
+    "stalign_transform_points": "experimental/tl/_align/_stalign.py",
+    "stalign_warp_image": "experimental/tl/_align/_stalign.py",
+    "stalign_deformation_grid": "experimental/tl/_align/_stalign.py",
 }
 #: Classes that *are* published, so these resolve through intersphinx instead.
 ROLES = {
@@ -133,7 +138,7 @@ from matplotlib.lines import Line2D
 # Upstream's gate, not a tuning knob: `STalign.py:1233` starts the mixture E step at 50.
 MIXTURE_GATE = 50
 
-energies = np.asarray(fit.energies)[: fit.n_iter]
+energies = np.asarray(fit['energies'])[: fit['n_iter']]
 descent = energies[MIXTURE_GATE + 1 :]        # the half of the trace that shares a definition
 tail = descent[-len(descent) // 10 :]
 print(f'after the gate: {descent[0]:.0f} -> {descent[-1]:.0f}, minimum {descent.min():.0f} '
@@ -150,13 +155,13 @@ plt.xlabel('iteration'); plt.ylabel('objective'); plt.grid(alpha=0.3)
         md("""
 ## Where each cell lands
 
-`transform` maps `(x, y)` section coordinates to `(x, y, z)` reference coordinates, evaluated at
+`stalign_transform_points` maps `(x, y)` section coordinates to `(x, y, z)` reference coordinates, evaluated at
 each point rather than at the nearest raster cell. `sample_volume` then reads the annotation
 volume there -- `order=0` because structure ids must not be interpolated.
 """),
         code("""
-coords = np.asarray(fit.transform(xy))                 # (N, 3), (x, y, z) in microns
-structure_id = sample_volume(labels, fit.ref_axes, coords, order=0).astype(int)
+coords = np.asarray(stalign_transform_points(fit, xy))  # (N, 3), (x, y, z) in microns
+structure_id = sample_volume(labels, fit['ref_axes'], coords, order=0).astype(int)
 
 print(f'{len(coords)} cells placed, {np.unique(structure_id).size} distinct structures, '
       f'{100 * (structure_id == 0).mean():.1f}% outside any annotated structure')
@@ -201,8 +206,8 @@ ax.legend(handles=[Line2D([], [], marker='o', ls='', ms=4, color=h.get_facecolor
 
 GUESS_TAIL = """
 def atlas_at(result):
-    plane = np.moveaxis(np.asarray(result.deformation_grid(direction='backward')), 0, -1)[0]
-    sampled = sample_volume(atlas, result.ref_axes, plane.reshape(-1, 3)[:, ::-1])
+    plane = np.moveaxis(np.asarray(stalign_deformation_grid(result, direction='backward')), 0, -1)[0]
+    sampled = sample_volume(atlas, result['ref_axes'], plane.reshape(-1, 3)[:, ::-1])
     return sampled.reshape(plane.shape[:2])
 """
 
