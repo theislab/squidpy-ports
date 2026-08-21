@@ -129,13 +129,31 @@ Going the other way for *points* -- cells into H&E pixels -- is not available: `
 runs query to reference, and the public API exposes no inverse for a point set.
 """),
         code("""
-density = np.asarray(fit.warp_image(np.asarray(section['section']), direction='backward')).squeeze()
-print(f'density resampled onto the H&E grid: {density.shape}')
+def physical_axes(element):
+    matrix = get_transformation(element, 'global').to_affine_matrix(
+        input_axes=('y', 'x'), output_axes=('y', 'x'))
+    return tuple((np.asarray(element.coords[a]) - 0.5) * matrix[k, k] + matrix[k, -1]
+                 for k, a in enumerate(('y', 'x')))
+
+# The fit runs on upstream's dx=30 raster -- 201 x 276 -- and resampling that onto 2051 x 2759
+# is a tenfold upsample, so it arrives soft no matter how it is drawn. `warp_image` takes
+# explicit axes for exactly this: the same fitted deformation can carry a finer raster, which
+# has the detail to survive the trip. The fit is unchanged; only what is pushed through it is.
+display = rasterized(xy, 8.0)
+density = np.asarray(fit.warp_image(
+    np.asarray(display['section']), direction='backward',
+    ref_axes=physical_axes(display['section']))).squeeze()
+print(f'fitted on {tuple(np.asarray(section["section"]).shape)}, '
+      f'displayed through a {tuple(np.asarray(display["section"]).shape)} raster '
+      f'-> {density.shape}')
 
 fig, ax = plt.subplots(1, 2, figsize=(14, 6))
 ax[0].imshow(he); ax[0].set_title('H&E')
 ax[1].imshow(he)
-ax[1].imshow(density, cmap='Blues', alpha=0.45)
+# Clipped at a high percentile rather than the max: a few dense cores otherwise take the whole
+# colour range and flatten everything else to nothing.
+ax[1].imshow(density, cmap='Blues', alpha=0.55, vmin=0,
+             vmax=np.percentile(density[density > 0], 99))
 ax[1].scatter(*landmarks_he.T, s=12, c='red', label='landmarks')
 ax[1].set_title('Xenium cell density warped onto it'); ax[1].legend(fontsize=8)
 for a in ax:
