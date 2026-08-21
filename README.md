@@ -20,23 +20,22 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 
 | | |
 | --- | --- |
-| **Visual comparison** | [Upstream's figure beside ours][comparison] — three real datasets: upstream's published figure beside ours, with the numerical agreement. |
-| **Notebook values comparison** | [Every variable in all 17 upstream notebooks][parity]; the per-variable metrics and manifests behind it are in [`docs/parity/`][parity-data]. |
-| **Reproduce any panel on any GPU box** | [`container/README.md`][container] — one pinned container, any GPU box. |
+| **squidpy API equivalence** | [Sixteen of STalign's seventeen analyses][api], rewritten against `squidpy.experimental.tl.align` and executed on a GPU — one page per upstream notebook, each linking the original it mirrors. |
+| **Numerical tests** | [The test suites][tests-section], layer by layer: [`tests/test_stalign.py`][ports-tests] guards the generator; [`tests/test_stalign_reference.py`][ref-tests] asserts the port against upstream, at rank 2 and rank 3. |
 | **Regenerate the reference bundle** | [Numerical tests][tests-section] — the command, the provenance blob, and the platform caveat that matters before you commit one. |
-| **Numerical tests** | [The test suites][tests-section], layer by layer: [`tests/test_stalign.py`][ports-tests] guards the generator and the replay harness; [`tests/test_stalign_reference.py`][ref-tests] asserts the port against upstream, at rank 2 and rank 3. |
+| **Reproduce on any GPU box** | [`container/README.md`][container] — one pinned container, any GPU box. |
 
-The panels are corroboration, not the gate. The gate is `tests/test_stalign_reference.py`, which
-compares the port at every layer — rasterisation, energy, gradients, trajectory, converged fit,
-image warp, and the section-into-volume fit. At rank 2 it matches upstream to ~1e-15 on the velocity
-field. At rank 3 it matches the solver on the seeded fixture, but the two implementations descend on
-different objectives once the velocity moves: upstream regularises over two spatial axes while
-smoothing that energy's gradient over three. That divergence is measured, not asserted away — see
-row D11 of [the divergence ledger](docs/STALIGN_DIVERGENCES.md), and the two volume-to-section rows
-on the [notebook values][parity] page for what it costs end to end.
+The executed notebooks are corroboration, not the gate. The gate is
+`tests/test_stalign_reference.py`, which compares the port at every layer — rasterisation, energy,
+gradients, trajectory, converged fit, image warp, and the section-into-volume fit. At rank 2 it
+matches upstream to ~1e-15 on the velocity field. At rank 3 it matches the solver on the seeded
+fixture, but the two implementations descend on different objectives once the velocity moves:
+upstream regularises over two spatial axes while smoothing that energy's gradient over three. That
+divergence is pinned by a strict xfail rather than asserted away, and the xfail's own docstring
+says what it costs.
 
-squidpy itself carries no STalign tests: correctness and parity are owned here, so squidpy's CI does
-not exercise that code and this suite is the gate.
+squidpy itself carries no STalign tests: correctness is owned here, so squidpy's CI does not
+exercise that code and this suite is the gate.
 
 ## Licensing
 
@@ -67,7 +66,7 @@ documented exception, and how to regenerate the bundle.
 
 ## Running the tests
 
-This repo's own suite guards the generator and the replay harness. It needs nothing but a clone:
+This repo's own suite guards the generator. It needs nothing but a clone:
 
 ```bash
 pytest
@@ -118,13 +117,11 @@ docstring. The raw pytest logs are committed beside the generated table in
 For questions and help requests, you can reach out in the [scverse discourse][].
 If you found a bug, please use the [issue tracker][].
 
-[comparison]: https://squidpy-ports.readthedocs.io/en/latest/stalign-comparison.html
-[tests-section]: https://squidpy-ports.readthedocs.io/en/latest/correctness.html
+[api]: https://theislab.github.io/squidpy-ports/squidpy-api.html
+[tests-section]: https://theislab.github.io/squidpy-ports/correctness.html
 [test-reports]: https://github.com/theislab/squidpy-ports/tree/main/docs/_static/tests
 [ports-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_stalign.py
 [ref-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_stalign_reference.py
-[parity]: https://squidpy-ports.readthedocs.io/en/latest/parity.html
-[parity-data]: https://github.com/theislab/squidpy-ports/tree/main/docs/parity
 [container]: https://github.com/theislab/squidpy-ports/blob/main/container/README.md
 [license-vendor]: https://github.com/theislab/squidpy-ports/blob/main/LICENSE.vendor
 [scverse discourse]: https://discourse.scverse.org/

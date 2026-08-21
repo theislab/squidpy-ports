@@ -1,5 +1,12 @@
 # STalign upstream notebook comparison status
 
+> **Historical.** The comparison harness these notes describe -- `notebook_suite`, the 17-notebook
+> parity launcher, the D13 flag sweep, the per-variable metrics pages -- was removed once the
+> public-API notebooks existed, and the divergence ledger with it. What follows records how the port
+> was established and what was measured on the way, so the reasoning is not lost; it does not
+> describe code in the tree. For the current state see `docs/squidpy-api.md` and
+> `.claude/notebooks/README.md`.
+
 The comparison harness covers all 17 notebooks from upstream STalign at
 `b2068edc98974efa54537eca194736e177bbe11d`. It runs the original preprocessing,
 captures the upstream fit inputs, and compares the PyTorch result with Squidpy's

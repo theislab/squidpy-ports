@@ -20,7 +20,7 @@ computed.
 
 2. **squidpy** commits that bundle under `tests/_data/stalign_reference/` and asserts the JAX port
    reproduces it at every layer —
-   [`test_stalign_reference.py`](https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/methods/test_stalign_reference.py)
+   [`test_stalign_reference.py`](https://github.com/selmanozleyen/squidpy/blob/6c4b5ce/tests/experimental/methods/test_stalign_reference.py)
    checks `primitives` (rasterisation) → `energy` → `gradients` → `trajectory` at 1, 5, 50 iterations
    → `converged` at 500 → image warping, and that every fixture's provenance names upstream
    `b2068ed`. On the internals the port matches upstream to **near machine precision** (the LDDMM
@@ -28,7 +28,7 @@ computed.
    rasterisation and interpolation at the boundaries, not from the fit.
 
 3. **The public API** (`sq.experimental.tl.align`) is covered by
-   [`test_align.py`](https://github.com/selmanozleyen/squidpy/blob/6a63ff8/tests/experimental/tl/test_align.py)
+   [`test_align.py`](https://github.com/selmanozleyen/squidpy/blob/6c4b5ce/tests/experimental/tl/test_align.py)
    — `AnnData`/`SpatialData` in-place vs copy, the path grammar, landmark handling, and recovering a
    known synthetic shift.
 
@@ -38,8 +38,8 @@ file above is linked: none of it has to be taken on faith from a figure.
 
 ## Results
 
-Run against upstream STalign `b2068ed` and squidpy fork `6a63ff8` — the same pinned pair behind the
-figures in the [executed notebooks](squidpy-api.md), so the pictures and the assertions
+Run against upstream STalign `b2068ed` and squidpy fork `6c4b5ce` — the same pinned pair behind
+the figures in the [executed notebooks](squidpy-api.md), so the pictures and the assertions
 describe one environment. Raw pytest output is served beside this page:
 [`squidpy-ports-tests.log`](_static/tests/squidpy-ports-tests.log) and
 [`squidpy-fork-tests.log`](_static/tests/squidpy-fork-tests.log).

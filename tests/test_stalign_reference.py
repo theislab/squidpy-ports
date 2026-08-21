@@ -248,7 +248,7 @@ def test_fixture_definitions_have_not_drifted(bundle):
 
 
 def test_fixture_samples_are_off_grid(primitives):
-    """No interpolation sample may sit on a grid line. See ledger row D10.
+    """No interpolation sample may sit on a grid line..
 
     Upstream and squidpy compute the fractional index by formulas that agree to ~1 ulp;
     exactly on a grid line they can floor() to different neighbours, giving an O(1)
@@ -435,7 +435,7 @@ def test_energy_budget_is_not_vacuous(bundle, primitives, source_grid, target_gr
 
 
 # --------------------------------------------------------------------------------------
-# Gradients -- ledger row D3
+# Gradients -- a known divergence
 # --------------------------------------------------------------------------------------
 
 
@@ -469,7 +469,7 @@ def test_gradients_match_upstream(measured_gradients, component, key, record_pro
     """``dE/dL``, ``dE/dT`` and the smoothed ``dE/dv`` vs upstream's, at iteration 0.
 
     Together with the energy test this pins both halves of the optimisation: the same
-    objective *and* the same search direction. See ledger row D3 -- these disagreed by
+    objective *and* the same search direction. these disagreed by
     ~1.2e-3 until ``_contrast_transform`` stopped differentiating through the ridge solve.
     """
     gradients, computed, suffix = measured_gradients
@@ -479,7 +479,7 @@ def test_gradients_match_upstream(measured_gradients, component, key, record_pro
 
 
 def test_contrast_transform_freezes_the_ridge_coefficients(record_property):
-    """Regression guard for ledger row D3, stated without reference to upstream.
+    """Regression guard, stated without reference to upstream.
 
     The ridge fit is an EM M-step solved exactly at the current estimate, so its coefficients
     must be constant with respect to the optimisation. Dropping ``stop_gradient`` changes only
@@ -550,7 +550,7 @@ def test_grid_length_is_stable_against_float_rounding(step):
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "ledger row D6: squidpy integrates the backward flow in reversed time order, "
+        "squidpy integrates the backward flow in reversed time order, "
         "upstream does not (STalign.py:1828-1843). squidpy is correct -- see "
         "test_backward_transform_inverts_better, which is the assertion that matters. "
         "This xfail exists to pin the literal difference, and should be deleted only if "
@@ -576,7 +576,7 @@ def test_backward_transform_inverts_better(fitted, primitives, record_property):
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "ledger row D5: upstream samples the velocity field with grid_sample's default "
+        "upstream samples the velocity field with grid_sample's default "
         "padding_mode='zeros' (STalign.py:1163, :1167), squidpy uses "
         "map_coordinates(mode='nearest'). squidpy is correct -- zeros make a point that "
         "drifts off the velocity grid snap to no displacement at all."
@@ -602,7 +602,7 @@ def test_interp_outside_domain_is_border_padding(primitives, source_grid, record
 # Budgeted divergences
 # --------------------------------------------------------------------------------------
 
-#: Per-blur relative-L2 budget for the rasteriser (ledger row D1). squidpy bins onto a
+#: Per-blur relative-L2 budget for the rasteriser (a known divergence). squidpy bins onto a
 #: grid and convolves once; upstream splats an exact sub-pixel Gaussian per point and
 #: renormalises it over a truncated window. Measured 4.08 % / 0.81 % / 2.87 % at blur
 #: 2.0 / 1.0 / 0.5 -- 6 % leaves headroom without going vacuous.
@@ -740,7 +740,7 @@ def test_trajectory_matches_upstream(bundle, primitives, niter, record_property)
     ``niter=50`` is deliberate: the mixture-weight E-step is gated on ``it >= 50``
     (STalign.py:1233), so below it the weights stay frozen and that branch goes untested.
     Upstream builds ``A`` at the top of each iteration, so ``LDDMM(n)["A"]`` reflects ``n-1``
-    updates; the fixture stores the un-lagged affine as ``A``. See ledger row D4.
+    updates; the fixture stores the un-lagged affine as ``A``..
     """
     snapshot = _load(bundle, f"trajectory_n{niter}")
     result = _run_lddmm(primitives, snapshot, niter)
@@ -821,7 +821,7 @@ def test_replay_image_call_reproduces_upstream(image_reference, record_property)
     landmarks went in as ``(x, y)``, and its row-col starting affine went into a parameter
     that reverses the axes itself. Three mirrored errors, largely self-cancelling on the
     fourteen notebooks whose two images are alike, and not at all on the one where they are
-    not (ledger row D12).
+    not (a known divergence).
     """
     fit = _harness_shaped_fit(image_reference)
     error = rel(fit.affine, image_reference["A"])
@@ -869,7 +869,7 @@ def test_mixed_unit_velocity_grid_matches_upstream(image_mixed_units, record_pro
 
     The grid is the deformation's entire degrees of freedom, so a difference here is not a
     tolerance question: on `xenium-heimage-alignment` the port builds 48x66 where upstream
-    builds 17x23, and that fit bends the section into a dome (ledger row D12).
+    builds 17x23, and that fit bends the section into a dome (a known divergence).
 
     This passes, and that is the useful part: mixed units *alone* do not reproduce D12, so
     the trigger is something more specific about that notebook's inputs. Kept as the control
@@ -1165,7 +1165,7 @@ def test_slice_grid_backward_matches_upstream(slice_reference, slice_axes, recor
     """``Stalign3DResult.deformation_grid(direction='backward')`` at rank 3 vs ``build_transform3D``.
 
     Upstream's 3D backward integration runs in reversed time order (STalign.py:1474), the
-    same order squidpy uses -- so ledger row D6, which pins a real disagreement on the 2D
+    same order squidpy uses -- so a known divergence, which pins a real disagreement on the 2D
     path, does not apply here and this is an equality rather than an xfail.
 
     The section's *two* axes go in: the rank-3 method applies upstream's single-sample z lift
@@ -1280,7 +1280,7 @@ def test_slice_transform_matches_the_solver_own_sampling_grid(slice_reference, s
 
     ``Xs`` comes from the frozen-velocity run, so this is the affine-only map: it says the
     public method reproduces what the solver actually did, not what a separate upstream helper
-    would do. Pairs with ``A_stale`` rather than ``A``, per ledger row D4.
+    would do. Pairs with ``A_stale`` rather than ``A``, per a known divergence.
     """
     reference, section = slice_axes
     result = Stalign3DResult(
@@ -1311,7 +1311,7 @@ def test_slice_sample_volume_matches_upstream(slice_reference, slice_axes, order
 
     ``order=0`` is the case that matters for an annotation volume: interpolating integer
     structure ids would invent regions that do not exist. It is also what makes the label
-    disagreement in ledger row D11 a step function of the fit.
+    disagreement in a known divergence a step function of the fit.
     """
     reference, _ = slice_axes
     # `sample_volume` takes points in `(x, y, z)`, the reverse of `axes` in `(z, y, x)`.
@@ -1366,7 +1366,7 @@ def test_slice_regularizer_axes_diverge_from_upstream(slice_reference, record_pr
     assert correct < EXACT, f"squidpy no longer matches the 3-axis regulariser: {correct:.3e}"
     assert against_upstream > 0.1, (
         "squidpy now agrees with upstream's 2-axis regularisation energy; if that is "
-        "deliberate, ledger row D11 has to be rewritten"
+        "deliberate, a known divergence has to be rewritten"
     )
 
 
@@ -1408,7 +1408,7 @@ def _harness_shaped_volume_fit(fixture, niter=_SLICE_ITERS):
     Through the replay's own `as_sdata` / `_initial_affine_xyz` / `solver_keys`, so this fails
     if any of them drifts. The velocity is frozen the way the generator freezes it
     (``diffeo_start`` past ``niter``); see :func:`_run_slice` for why that is the only regime
-    where a rank-3 trajectory comparison measures the port rather than ledger row D11.
+    where a rank-3 trajectory comparison measures the port rather than a known divergence.
     """
     from tests._replay import (
         _IMAGE_KEY,

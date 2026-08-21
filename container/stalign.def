@@ -6,7 +6,7 @@ Bootstrap: docker
 # image installs `jax[cuda12]`, so the 13.x line is not an option.
 From: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
 
-# Reproduces one STalign port-vs-upstream comparison notebook from pinned, public sources.
+# Reproduces one of the squidpy-API STalign notebooks from pinned, public sources.
 # Build from the repository root:
 #     apptainer build container/stalign.sif container/stalign.def
 # See container/README.md for how to run it.
@@ -20,10 +20,8 @@ From: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
     # Vendored upstream STalign (pinned submodule) carries its own notebooks AND the
     # example datasets, so the image is self-contained and needs no network at run time.
     vendor /opt/squidpy-ports/vendor
-    # The comparison notebooks the container executes (each fits upstream + the JAX port).
-    docs/notebooks/stalign-merfish-comparison.ipynb /opt/squidpy-ports/docs/notebooks/stalign-merfish-comparison.ipynb
-    docs/notebooks/stalign-visium-affine-comparison.ipynb /opt/squidpy-ports/docs/notebooks/stalign-visium-affine-comparison.ipynb
-    docs/notebooks/stalign-xenium-comparison.ipynb /opt/squidpy-ports/docs/notebooks/stalign-xenium-comparison.ipynb
+    # The public-API notebooks the container executes.
+    docs/notebooks/squidpy-api /opt/squidpy-ports/docs/notebooks/squidpy-api
 
 %post
     set -eu
@@ -47,14 +45,14 @@ From: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
     uv sync --frozen
     # Pinned to the SHA that was the tip of feat/experimental-fit-core at authoring time.
     # Change @<sha> to @feat/experimental-fit-core to track the branch instead. nbclient +
-    # ipykernel execute the notebooks; the resolved commit is recorded in each run's manifest.
+    # ipykernel execute the notebooks.
     uv pip install --python .venv/bin/python \
-        "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@9735ba3c8198ba279f3f688df92ba5a6876e28c4" \
+        "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@6c4b5ce93b100f43fe873949aef6446461a276c0" \
         "jax[cuda12]" nbclient nbformat ipykernel watermark
     # Register a python3 kernel inside the env so the notebook executor finds it.
     .venv/bin/python -m ipykernel install --sys-prefix --name python3 --display-name python3
 
-    # The comparison notebooks read their inputs from docs/_build/stalign-data/<dir>. The
+    # The notebooks resolve their inputs relative to the working directory. The
     # vendored STalign checkout carries those exact files, so point there: a run finds the data
     # present and skips the download, keeping it offline. The link name must match each
     # notebook's expected dir -- xenium omits the `_data` suffix the others use.
@@ -72,13 +70,25 @@ From: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
     export MPLCONFIGDIR=/tmp/mpl
 
 %runscript
-    cd /opt/squidpy-ports
-    # Execute one comparison notebook -> executed notebook + panel + manifest in /output. e.g.
-    #   apptainer run --nv --bind ./out:/output stalign.sif stalign-xenium-comparison.ipynb
-    exec python -m squidpy_ports.stalign.execute_comparison \
-        "${1:-stalign-xenium-comparison.ipynb}" \
-        --output-dir "${STALIGN_OUTPUT:-/output}"
+    # Execute one public-API notebook -> the executed notebook, with its figures, in /output. e.g.
+    #   apptainer run --nv --bind ./out:/output stalign.sif merfish-merfish.ipynb
+    #
+    # nbclient rather than nbconvert: one fewer dependency, and it takes the working directory
+    # directly, which is what the notebooks resolve their inputs against.
+    cd /opt/squidpy-ports/docs/_build/stalign-data
+    NB="${1:-merfish-merfish.ipynb}"
+    exec /opt/squidpy-ports/.venv/bin/python - "$NB" "${STALIGN_OUTPUT:-/output}" <<'PY'
+import sys, nbformat
+from nbclient import NotebookClient
+
+name, out = sys.argv[1], sys.argv[2]
+nb = nbformat.read(f"/opt/squidpy-ports/docs/notebooks/squidpy-api/{name}", as_version=4)
+NotebookClient(nb, timeout=None, kernel_name="python3",
+               resources={"metadata": {"path": "."}}).execute()
+nbformat.write(nb, f"{out}/{name}")
+print(f"wrote {out}/{name}")
+PY
 
 %labels
     upstream.stalign b2068edc98974efa54537eca194736e177bbe11d
-    squidpy.fork selmanozleyen/squidpy@9735ba3c8198ba279f3f688df92ba5a6876e28c4
+    squidpy.fork selmanozleyen/squidpy@6c4b5ce93b100f43fe873949aef6446461a276c0
