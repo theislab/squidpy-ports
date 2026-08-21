@@ -48,12 +48,25 @@ RUN_HOME="$(getent passwd "$RUN_USER" | cut -d: -f6)"
 export HOME="$RUN_HOME" USER="$RUN_USER"
 export PATH="$RUN_HOME/.local/bin:${PATH:-/usr/local/bin:/usr/bin:/bin}"
 
-SCRATCH="/localscratch/$RUN_USER/stalign-nb-$SLURM_JOB_ID"
+# /localscratch is node-local and much the faster choice, but it is shared with every other
+# user of the node and is not cleaned between jobs: supergpu14 was handed over with 112 KB free
+# of 131 GB, all of it in other users' unreadable directories, so there was nothing to prune
+# and `mkdir` simply failed. Falling back to Lustre is worse for the metadata server -- a venv
+# is tens of thousands of small files -- and better than not running at all.
+SCRATCH_BASE="/localscratch/$RUN_USER"
+if ! mkdir -p "$SCRATCH_BASE" 2>/dev/null ||
+   [[ "$(df -BM --output=avail "$SCRATCH_BASE" 2>/dev/null | tail -1 | tr -dc '0-9')" -lt 20000 ]]; then
+    SCRATCH_BASE="${STALIGN_SCRATCH_FALLBACK:-/lustre/boost_ai/users/$RUN_USER/stalign-scratch}"
+    mkdir -p "$SCRATCH_BASE"
+    echo "### /localscratch unusable on $(hostname -s); falling back to $SCRATCH_BASE"
+fi
+
+SCRATCH="$SCRATCH_BASE/stalign-nb-$SLURM_JOB_ID"
 WORK="$SCRATCH/work"
-# One uv cache per node, outside SCRATCH so it survives this job: the torch and CUDA wheels
-# are ~2.5 GB and re-downloading them is the whole difference between a 30 s setup and a
-# 6 min one. Node-local, never Lustre -- a uv cache is tens of thousands of small files.
-export UV_CACHE_DIR="/localscratch/$RUN_USER/uv-cache"
+# One uv cache per scratch base, outside SCRATCH so it survives this job: the torch and CUDA
+# wheels are ~2.5 GB and re-downloading them is the whole difference between a 30 s setup and
+# a 6 min one.
+export UV_CACHE_DIR="$SCRATCH_BASE/uv-cache"
 export UV_PROJECT_ENVIRONMENT="$SCRATCH/.venv"
 # Deliberately NOT `UV_LINK_MODE=copy`, which the comparison launcher sets: there the cache and
 # the venv could land on different mounts, so copying was the safe choice. Here both are under
@@ -92,7 +105,7 @@ git -C "$SQUIDPY" fetch --quiet origin
 git -C "$SQUIDPY" checkout --quiet --detach "$SQUIDPY_REV"
 echo "### ports=$PORTS @ $(git -C "$PORTS" rev-parse HEAD)"
 echo "### squidpy=$SQUIDPY @ $(git -C "$SQUIDPY" rev-parse HEAD) ($SQUIDPY_REV)"
-echo "### scratch=$SCRATCH out=$OUT"
+echo "### scratch=$SCRATCH (base $SCRATCH_BASE) out=$OUT"
 echo "### uv_cache=$UV_CACHE_DIR size=$(du -sh "$UV_CACHE_DIR" 2>/dev/null | cut -f1)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 

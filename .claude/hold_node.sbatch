@@ -41,9 +41,8 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 FREE_MB="$(df -BM --output=avail /localscratch 2>/dev/null | tail -1 | tr -dc '0-9')"
 echo "### localscratch: ${FREE_MB:-?} MB free of $(df -BG --output=size /localscratch 2>/dev/null | tail -1 | tr -d ' ')"
 if [[ -z "$FREE_MB" || "$FREE_MB" -lt 20000 ]]; then
-    echo "Refusing to hold $(hostname): needs ~20 GB free on /localscratch for the venv and" >&2
-    echo "caches, found ${FREE_MB:-0} MB. Resubmit with --exclude=$(hostname -s)." >&2
-    exit 1
+    echo "### warning: only ${FREE_MB:-0} MB free on /localscratch; runs on this node will"
+    echo "### fall back to Lustre, which works but is slower. --exclude=$(hostname -s) to avoid it."
 fi
 
 # Publish the allocation so any session can find and share it.
