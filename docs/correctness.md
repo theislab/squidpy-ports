@@ -59,8 +59,7 @@ pytest -m "reference or not reference" \
 
 The two expected failures are deliberate divergences where **squidpy is the more correct of the
 two**, pinned as strict `xfail` so that silently adopting upstream's behaviour breaks the build.
-Each cites a row in the [divergence ledger](STALIGN_DIVERGENCES.md), and
-`test_divergences_doc_covers_all_xfails` asserts every xfail cites a row that exists.
+Each names the divergence it encodes in its own docstring.
 
 Nothing is skipped when both sides are installed. Running this repo's suite
 alone leaves one test skipped — it needs JAX and squidpy, which this repo deliberately does not

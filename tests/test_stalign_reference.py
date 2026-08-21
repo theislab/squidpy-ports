@@ -6,7 +6,7 @@ from the vendored PyTorch STalign, by the same generator that writes the shareab
 this repo or in squidpy, and the comparison cannot silently drift from the pin.
 
 This is the layer that asserts the *port*, so it needs squidpy and JAX; both are optional
-here and the module skips without them. See ``docs/STALIGN_DIVERGENCES.md`` for what each
+here and the module skips without them. Each xfail's own docstring says what
 comparison found and why the known-divergent ones are pinned rather than fixed.
 
 Run them with::
@@ -20,7 +20,6 @@ Rank 2 is section-to-section (upstream ``LDDMM``); rank 3 is section-into-volume
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import numpy as np
@@ -61,8 +60,6 @@ from squidpy_ports.stalign import fixtures as F  # noqa: E402
 from squidpy_ports.stalign import generate as G  # noqa: E402
 from squidpy_ports.stalign import upstream  # noqa: E402
 
-LEDGER = Path(__file__).resolve().parents[1] / "docs" / "STALIGN_DIVERGENCES.md"
-
 
 @pytest.fixture(scope="session")
 def bundle(tmp_path_factory) -> Path:
@@ -97,7 +94,7 @@ def bundle(tmp_path_factory) -> Path:
     return out
 
 
-# Tolerances are calibrated from the measured gaps recorded in STALIGN_DIVERGENCES.md,
+# Tolerances are calibrated from the measured gaps between the port and upstream,
 # not guessed. Everything the port reproduces faithfully lands at 1e-15 or better, so a
 # 1e-12 budget leaves three orders of headroom while still being three orders tighter
 # than any divergence we are pinning.
@@ -1403,20 +1400,6 @@ def test_slice_fit_reaches_the_same_place_as_the_solver(slice_reference, record_
 # --------------------------------------------------------------------------------------
 # The ledger has to stay in sync
 # --------------------------------------------------------------------------------------
-
-
-def test_divergences_doc_covers_all_xfails():
-    """Every strict xfail cites a ledger row, and every cited row exists."""
-    ledger = LEDGER.read_text()
-    documented = set(re.findall(r"\*\*(D\d+)\*\*", ledger))
-    assert documented, "no ledger rows found; STALIGN_DIVERGENCES.md changed shape"
-
-    source = Path(__file__).read_text()
-    cited = set(re.findall(r"ledger row (D\d+)", source))
-    assert cited, "no test cites a ledger row"
-
-    missing = cited - documented
-    assert not missing, f"tests cite ledger rows that do not exist: {sorted(missing)}"
 
 
 def _harness_shaped_volume_fit(fixture, niter=_SLICE_ITERS):
