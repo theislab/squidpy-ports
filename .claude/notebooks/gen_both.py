@@ -1,4 +1,5 @@
 import json
+import os
 
 
 def lines(src):
@@ -159,12 +160,24 @@ nb_meta = {
 
 
 def write(path, cells):
-    """Write a notebook, refusing one whose code does not parse."""
+    """Write a notebook, refusing one whose code does not parse.
+
+    A notebook whose sources are already what we would emit is left untouched, outputs and
+    all. Rewriting it would blank the figures of something that did not change -- which is how
+    a one-line edit to one notebook has repeatedly cost the executed outputs of every other
+    notebook the same generator emits.
+    """
     for c in cells:
         if c["cell_type"] == "code":
             import ast
 
             ast.parse("".join(c["source"]))
+    if os.path.exists(path):
+        current = json.load(open(path))
+        if [c["source"] for c in current["cells"]] == [c["source"] for c in cells]:
+            print(f"unchanged {path}")
+            return
+
     with open(path, "w") as f:
         json.dump({"cells": cells, "metadata": nb_meta, "nbformat": 4, "nbformat_minor": 5}, f, indent=1)
         f.write("\n")

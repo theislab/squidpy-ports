@@ -12,9 +12,13 @@ Run them from the repository root -- the output paths are repo-relative:
 
 `gen_both.py` is imported by the others and writes nothing on its own.
 
-**Running a generator destroys the executed outputs** -- it writes the notebook from scratch. The
-order is regenerate, execute, then commit; committing in between leaves 10 kB stubs in git that
-look like progress. Execute with:
+A generator leaves a notebook alone when its sources already match what would be emitted, so
+regenerating after a one-line change no longer blanks the figures of every other notebook the
+same generator produces. Only what actually changed needs re-executing -- watch for `unchanged`
+versus `wrote` in the output.
+
+The order is still regenerate, execute, then commit; committing in between leaves 10 kB stubs in
+git that look like progress. Execute with:
 
     ports-clone/.claude/on_held_node.sh          # inside a held allocation, seconds
     sbatch --export=NIL .claude/run_public_api_notebooks.sbatch   # otherwise, queued
