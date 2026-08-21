@@ -5,8 +5,8 @@ affine + LDDMM alignment in JAX. This site is the evidence that the port is the 
 
 - **[STalign: squidpy API equivalence](squidpy-api.md)** — sixteen of STalign's seventeen analyses
   rewritten against squidpy's public API, executed on a GPU, one page per upstream notebook.
-- **[Tests: numeric and notebook comparison](correctness.md)** — the seeded reference suite that
-  gates the port, and the development-only notebook comparison that established its foundation.
+- **[Numerical tests](correctness.md)** — the seeded reference suite that gates the port: what
+  each test asserts, and its result.
 
 Upstream STalign is pinned throughout to
 [`b2068ed`](https://github.com/JEFworks-Lab/STalign/tree/b2068edc98974efa54537eca194736e177bbe11d),
@@ -20,6 +20,6 @@ Source: [theislab/squidpy-ports](https://github.com/theislab/squidpy-ports).
 :maxdepth: 1
 
 STalign: squidpy API equivalence <squidpy-api.md>
-Tests: numeric and notebook comparison <correctness.md>
+Numerical tests <correctness.md>
 Divergence ledger <STALIGN_DIVERGENCES.md>
 ```

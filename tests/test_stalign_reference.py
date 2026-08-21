@@ -43,7 +43,7 @@ from squidpy.experimental.tl import (  # noqa: E402
 # The estimators stay private on purpose: this module's job is to pin the *kernel* against
 # upstream at the same axes, and the public `align_stalign_*` entry points take an element's
 # placement rather than its axes -- squidpy rebuilds them from a `Scale`/`Translation`, which
-# is not bit-exact for every grid (see `notebook_suite.axis_placement`). A comparison that
+# is not bit-exact for every grid (see `tests._replay.axis_placement`). A comparison that
 # asserts agreement at ~1e-15 cannot afford the harness perturbing its own inputs.
 #
 # The obs case is the exception and goes through the public `align_stalign_obs`: it starts
@@ -789,12 +789,12 @@ def image_reference(bundle):
 
 
 def _harness_shaped_fit(fixture, *, swap_roles=False):
-    """The image fit exactly as ``notebook_suite._compare_lddmm`` issues it.
+    """The image fit exactly as the retired harness issued it.
 
     Through the harness's own `as_sdata` / `_initial_affine_xy` rather than a second copy of
     them, so this fails if either drifts.
     """
-    from squidpy_ports.stalign.notebook_suite import (
+    from tests._replay import (
         _IMAGE_KEY,
         _channels_first,
         _initial_affine_xy,
@@ -1420,14 +1420,14 @@ def test_divergences_doc_covers_all_xfails():
 
 
 def _harness_shaped_volume_fit(fixture, niter=_SLICE_ITERS):
-    """The rank-3 fit exactly as ``notebook_suite._compare_lddmm_3d`` issues it.
+    """The rank-3 fit exactly as the retired harness issued it.
 
     Through the replay's own `as_sdata` / `_initial_affine_xyz` / `solver_keys`, so this fails
     if any of them drifts. The velocity is frozen the way the generator freezes it
     (``diffeo_start`` past ``niter``); see :func:`_run_slice` for why that is the only regime
     where a rank-3 trajectory comparison measures the port rather than ledger row D11.
     """
-    from squidpy_ports.stalign.notebook_suite import (
+    from tests._replay import (
         _IMAGE_KEY,
         _channels_first,
         _initial_affine_xyz,
@@ -1455,7 +1455,7 @@ def test_replay_volume_call_resolves_the_axes_it_was_given(slice_reference):
     and the solver. At rank 2 that round-trip is exact, which is what makes the rank-2 numbers
     trustworthy. Rank 3 adds a third axis and a section lifted onto ``z = 0``, and the atlas
     axes carry offsets far larger than their step -- exactly the case
-    :func:`notebook_suite.axis_placement` warns cannot always be recovered by differencing.
+    :func:`tests._replay.axis_placement` warns cannot always be recovered by differencing.
     """
     fit = _harness_shaped_volume_fit(slice_reference)
 

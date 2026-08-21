@@ -2,6 +2,14 @@
 orphan: true
 ---
 
+```{note}
+Rows below were measured with the notebook-comparison harness, which replayed upstream's own
+notebooks through internal API and compared every intermediate. That harness has since been
+retired -- the public-API notebooks carry the real-data evidence now -- so references here to
+`notebook_suite`, `flag_report` or the comparison launchers describe how a number *was* obtained,
+not code you will find in the tree. The measurements stand; the machinery is gone.
+```
+
 # STalign port — divergence ledger
 
 Where squidpy's JAX port (`src/squidpy/experimental/tl/_align/_stalign_impl/`) differs from
