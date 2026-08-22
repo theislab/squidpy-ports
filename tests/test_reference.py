@@ -11,7 +11,7 @@ comparison found and why the known-divergent ones are pinned rather than fixed.
 
 Run them with::
 
-    JAX_ENABLE_X64=1 pytest tests/test_stalign_reference.py
+    JAX_ENABLE_X64=1 pytest tests/test_reference.py
 
 Rank 2 is section-to-section (upstream ``LDDMM``); rank 3 is section-into-volume
 (``LDDMM_3D_to_slice``).
@@ -115,7 +115,7 @@ def _skip_without_x64() -> None:
 
     ``jax.config.update`` is process-global; under ``-n auto`` every worker imports every
     test module, so setting it here would silently flip the float32 tests in
-    ``test_stalign.py`` to float64 in the same worker. It has to come from the
+    ``test_generator.py`` to float64 in the same worker. It has to come from the
     environment.
     """
     if not jax.config.jax_enable_x64:

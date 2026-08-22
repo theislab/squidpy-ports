@@ -21,12 +21,12 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 | | |
 | --- | --- |
 | **squidpy API equivalence** | [Sixteen of STalign's seventeen analyses][api], rewritten against `squidpy.experimental.tl.align` and executed on a GPU — one page per upstream notebook, each linking the original it mirrors. |
-| **Numerical tests** | [The test suites][tests-section], layer by layer: [`tests/test_stalign.py`][ports-tests] guards the generator; [`tests/test_stalign_reference.py`][ref-tests] asserts the port against upstream, at rank 2 and rank 3. |
-| **Regenerate the reference bundle** | [Numerical tests][tests-section] — the command, the provenance blob, and the platform caveat that matters before you commit one. |
+| **Numerical tests** | Two suites, split by what they are allowed to touch: [`tests/test_generator.py`][ports-tests] guards this repo's own inputs — the vendored pin, the fixture definitions, the provenance stamp; [`tests/test_reference.py`][ref-tests] asserts the port against upstream at rank 2 and rank 3. |
+| **Regenerate the reference bundle** | [Running the tests](#running-the-tests) — the command, the provenance blob, and the platform caveat that matters before you commit one. |
 | **Reproduce on any GPU box** | [`container/README.md`][container] — one pinned container, any GPU box. |
 
 The executed notebooks are corroboration, not the gate. The gate is
-`tests/test_stalign_reference.py`, which compares the port at every layer — rasterisation, energy,
+`tests/test_reference.py`, which compares the port at every layer — rasterisation, energy,
 gradients, trajectory, converged fit, image warp, and the section-into-volume fit. At rank 2 it
 matches upstream to ~1e-15 on the velocity field. At rank 3 it matches the solver on the seeded
 fixture, but the two implementations descend on different objectives once the velocity moves:
@@ -34,8 +34,11 @@ upstream regularises over two spatial axes while smoothing that energy's gradien
 divergence is pinned by a strict xfail rather than asserted away, and the xfail's own docstring
 says what it costs.
 
-squidpy itself carries no STalign tests: correctness is owned here, so squidpy's CI does not
-exercise that code and this suite is the gate.
+**Which suite a test belongs to.** squidpy owns the public path: `align_stalign_*`,
+`align_landmarks`, `rasterize_points`, `sample_volume`, asserted through their public entry points
+only. This repository owns everything that imports a private name or compares against a value
+upstream computed — which is the whole of `tests/test_reference.py`, and why it lives here rather
+than in squidpy's CI.
 
 ## Licensing
 
@@ -61,8 +64,7 @@ none of which resolve on a current Python. Vendoring makes those pins irrelevant
 `uv.lock` supplies the reproducibility instead.
 
 Nothing here reimplements upstream — every value comes from calling a public upstream function or
-observing the unmodified `LDDMM` loop. [Numerical tests][tests-section] has the reasoning, the one
-documented exception, and how to regenerate the bundle.
+observing the unmodified `LDDMM` loop.
 
 ## Running the tests
 
@@ -75,7 +77,7 @@ pytest
 One test skips without squidpy and JAX installed — deliberately, since this repo does not depend on
 either. Install both and it runs.
 
-`tests/test_stalign_reference.py` is the layer that asserts the *port*. It needs squidpy and JAX,
+`tests/test_reference.py` is the layer that asserts the *port*. It needs squidpy and JAX,
 so it skips without them; install squidpy and it runs. Every upstream value it compares against is
 computed **in this process** from the vendored checkout, by the same generator that writes the
 shareable bundle — so no committed binary can go stale, here or in squidpy. No GPU: float64 on CPU,
@@ -83,7 +85,7 @@ about 80 s on a laptop.
 
 ```bash
 uv pip install -e ".[test]" -e /path/to/squidpy"[jax]" pytest
-MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_ENABLE_X64=1 pytest tests/test_stalign_reference.py
+MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_ENABLE_X64=1 pytest tests/test_reference.py
 ```
 
 > **`JAX_ENABLE_X64=1` is not optional.** Upstream is double throughout; without it the port runs in
@@ -95,33 +97,14 @@ The `.npz` bundle is still what a *shareable* reference looks like, and
 `python -m squidpy_ports.stalign.generate --out DIR` writes it. Nothing in this repo's tests reads
 it from disk; it exists for anyone who wants the numbers without a torch install.
 
-### How the results table is generated
-
-The table on [Numerical tests][tests-section] is not written by hand. Run the suites above with
-`--junitxml`, then:
-
-```bash
-python -m squidpy_ports.stalign.test_report \
-    --suite "this repo:tests/test_stalign.py:ports.xml" \
-    --suite "reference suite:tests/test_stalign_reference.py:reference.xml" \
-    --output docs/_static/tests/results.md
-```
-
-Statuses and expected-failure reasons come from the JUnit XML; each test's description is its own
-docstring, read from the source. Nothing paraphrases a test, so a wrong description is a wrong
-docstring. The raw pytest logs are committed beside the generated table in
-[`docs/_static/tests/`][test-reports].
-
 ## Contact
 
 For questions and help requests, you can reach out in the [scverse discourse][].
 If you found a bug, please use the [issue tracker][].
 
 [api]: https://theislab.github.io/squidpy-ports/squidpy-api.html
-[tests-section]: https://theislab.github.io/squidpy-ports/correctness.html
-[test-reports]: https://github.com/theislab/squidpy-ports/tree/main/docs/_static/tests
-[ports-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_stalign.py
-[ref-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_stalign_reference.py
+[ports-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_generator.py
+[ref-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_reference.py
 [container]: https://github.com/theislab/squidpy-ports/blob/main/container/README.md
 [license-vendor]: https://github.com/theislab/squidpy-ports/blob/main/LICENSE.vendor
 [scverse discourse]: https://discourse.scverse.org/

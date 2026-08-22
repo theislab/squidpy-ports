@@ -7,7 +7,7 @@ One section per port.
 
 - **[STalign](stalign.md)** — affine + LDDMM alignment, reimplemented in JAX as
   `squidpy.experimental.tl.align`. The public API is covered by sixteen of upstream's own analyses
-  rewritten against it and executed, and the numerics are gated by a seeded reference suite.
+  rewritten against it and executed on a GPU.
 
 Source: [theislab/squidpy-ports](https://github.com/theislab/squidpy-ports).
 

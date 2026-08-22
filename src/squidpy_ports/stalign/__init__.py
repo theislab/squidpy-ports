@@ -2,7 +2,7 @@
 
 The upstream PyTorch implementation is vendored at ``vendor/STalign`` and pinned to a
 single commit. This package runs it, unmodified, and writes the numbers squidpy's
-``tests/experimental/methods/test_stalign_reference.py`` compares against.
+``tests/experimental/tl/test_align_stalign.py`` compares against.
 """
 
 from . import fixtures, upstream

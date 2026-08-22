@@ -8,9 +8,11 @@ is the evidence that the port is the same algorithm, in two parts that answer di
   `squidpy.experimental.tl.align`, is covered by sixteen of STalign's seventeen analyses rewritten
   against it and executed on a GPU, one page per upstream notebook. These show the results are
   reasonable on real data, through the public surface only.
-- **[Numerical tests](correctness.md)** — the seeded reference suite that gates the port. A figure
-  can look right while the numerics underneath have drifted; this is what rules that out, by
-  asserting every stage against values upstream STalign itself computed.
+
+The numerics are gated separately, by the test suites in this repository rather than by a page:
+[`tests/test_reference.py`](https://github.com/theislab/squidpy-ports/blob/main/tests/test_reference.py)
+asserts every stage of the port against values upstream STalign itself computed, since a figure can
+look right while the algorithm underneath has drifted.
 
 Upstream STalign is pinned throughout to
 [`b2068ed`](https://github.com/JEFworks-Lab/STalign/tree/b2068edc98974efa54537eca194736e177bbe11d),
@@ -23,5 +25,4 @@ Every page names the commit behind its own numbers.
 :maxdepth: 2
 
 squidpy API equivalence <squidpy-api.md>
-Numerical tests <correctness.md>
 ```

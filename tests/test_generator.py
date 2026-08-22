@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import re
-from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -128,43 +127,6 @@ def test_fixture_transform_is_not_round(name):
     assert np.all(np.abs(value - np.round(value, 2)) > 1e-6)
 
 
-def test_report_folds_parametrised_cases_and_separates_xfail_from_skip(tmp_path):
-    """A generated page must not report `passed` for a function that also xfailed.
-
-    JUnit writes an xfail as `<skipped type="pytest.xfail">`, so the two are one tag apart, and
-    conflating them would turn a pinned deliberate divergence into "this did not run".
-    """
-    from squidpy_ports.stalign.test_report import collect, render
-
-    source = tmp_path / "test_thing.py"
-    source.write_text(
-        'def test_many():\n    """Runs three ways."""\n\n\ndef test_mixed():\n    """Passes once, xfails once."""\n'
-        '\n\ndef test_gone():\n    """Never ran."""\n'
-    )
-    (tmp_path / "r.xml").write_text(
-        '<testsuites><testsuite name="pytest">'
-        '<testcase classname="t" name="test_many[a]"/>'
-        '<testcase classname="t" name="test_many[b]"/>'
-        '<testcase classname="t" name="test_many[c]"/>'
-        '<testcase classname="t" name="test_mixed[x]"/>'
-        '<testcase classname="t" name="test_mixed[y]">'
-        '<skipped type="pytest.xfail" message="ledger row D6"/></testcase>'
-        "</testsuite></testsuites>"
-    )
-
-    functions = {f.name: f for f in collect(tmp_path / "r.xml", source)}
-    assert "test_gone" not in functions, "a function with no reported cases must not appear"
-    assert functions["test_many"].cases == 3, "parametrised cases fold into one row"
-    assert functions["test_many"].status == "passed"
-    # The whole point: one xfail out of two cases must not read as a pass.
-    assert functions["test_mixed"].status == "xfailed"
-    assert functions["test_mixed"].reasons == ["ledger row D6"]
-
-    page = render([("demo", source, list(functions.values()))])
-    assert "ledger row D6" in page, "the reason has to survive into the page"
-    assert "Runs three ways." in page, "descriptions come from the docstring, not a paraphrase"
-
-
 # --------------------------------------------------------------------------------------
 # The rank-3 (volume-to-section) comparison's conversion helpers
 # --------------------------------------------------------------------------------------
@@ -226,33 +188,6 @@ def test_rank_three_defaults_are_actually_different_from_rank_two():
         if name in _stalign._SOLVER_DEFAULTS and _stalign._SOLVER_DEFAULTS[name] != value
     }
     assert differing == {"expand", "epL", "epT", "epV", "sigmaR"}, sorted(differing)
-
-
-def test_results_table_header_matches_its_rows():
-    """The published table's column titles have to describe the cells under them.
-
-    The header and the row are built by two separate f-strings, so they can disagree
-    silently -- and did: `Test functions` sat above the prose label and `Cases` above the
-    function count, in a table `docs/correctness.md` includes verbatim.
-    """
-    from squidpy_ports.stalign.test_report import TestFunction, render
-
-    functions = [
-        TestFunction(name="test_one", doc="first", outcomes=Counter({"passed": 2})),
-        TestFunction(name="test_two", doc="second", outcomes=Counter({"passed": 1})),
-    ]
-    table = render([("what it covers", Path("test_demo.py"), functions)])
-    # the first three are the per-suite summary; `render` also emits a per-test detail table
-    header, _, row = [line for line in table.splitlines() if line.startswith("|")][:3]
-    columns = [c.strip() for c in header.strip("|").split("|")]
-    cells = [c.strip() for c in row.strip("|").split("|")]
-    assert len(columns) == len(cells)
-
-    by_column = dict(zip(columns, cells, strict=True))
-    assert by_column["Suite"] == "`test_demo.py`"
-    assert by_column["What it covers"] == "what it covers"
-    assert by_column["Test functions"] == "2", "the function count must sit under its own title"
-    assert "3 cases" in by_column["Result"], "the case total belongs in Result, not in a count column"
 
 
 def test_squidpy_commit_prefers_the_install_record_and_never_guesses(monkeypatch):

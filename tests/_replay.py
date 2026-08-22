@@ -1,6 +1,6 @@
 """Helpers the reference suite borrows, carved out of the retired notebook-comparison harness.
 
-`test_stalign_reference.py` issues its fits the way the harness issued them, deliberately: the
+`test_reference.py` issues its fits the way the harness issued them, deliberately: the
 reference numbers are only meaningful if they come from the same call the port actually makes.
 When the harness itself was dropped -- it replayed upstream's notebooks through internal API and
 its evidence has been retired from the docs -- these eight pieces were all that the numeric tests
