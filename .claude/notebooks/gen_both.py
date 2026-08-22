@@ -109,49 +109,10 @@ def mean_normalised(sdata, key):
     )
 """
 
-TAIL_MD_FIT = """
-The objective is not one function across this whole trace. The mixture E step switches on at
-iteration 50 (`STalign.py:1233`): before it, the artifact / background / matching weights are
-frozen at their initial values, so the energy either side of the dashed line is computed
-against different weights and steps discontinuously there. Squidpy's own solver says so --
-"the objective changes definition here and its value jumps discontinuously".
 
-So the descent worth reading is the part after the gate. A minimum reported "at iteration 49"
-belongs to the pre-gate objective, not to a better alignment, and stopping there would stop
-before the mixture model has done anything at all. `tol` already knows this: its warm-up runs
-to `50 + 2 + patience` before the improvement test is allowed to fire.
-
-What a flat post-gate tail means here is that the affine and the velocity field have settled;
-the panels below are the check that matters, and they are the reason this is read as converged
-rather than as a fit that ran away.
-"""
-
-
-def tail(section_title, initial_title):
-    """The cells every volume notebook ends with: trace, placement, ontology, panels."""
+def tail(section_title):
+    """The cells every volume notebook ends with: placement, ontology, panels."""
     return [
-        md(TAIL_MD_FIT),
-        code("""
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-
-# Upstream's gate, not a tuning knob: `STalign.py:1233` starts the mixture E step at 50.
-MIXTURE_GATE = 50
-
-energies = np.asarray(fit['energies'])[: fit['n_iter']]
-descent = energies[MIXTURE_GATE + 1 :]        # the half of the trace that shares a definition
-tail = descent[-len(descent) // 10 :]
-print(f'after the gate: {descent[0]:.0f} -> {descent[-1]:.0f}, minimum {descent.min():.0f} '
-      f'at iteration {MIXTURE_GATE + 1 + int(descent.argmin())}')
-print(f'last tenth: mean {tail.mean():.0f}, spread {np.ptp(tail):.0f} '
-      f'({100 * np.ptp(tail) / tail.mean():.1f}% of its mean)')
-
-plt.plot(energies, lw=0.8)
-plt.axvline(MIXTURE_GATE, color='0.6', lw=0.8, ls='--')
-plt.annotate('mixture E step on', (MIXTURE_GATE, plt.ylim()[1]), fontsize=8,
-             xytext=(6, -12), textcoords='offset points', color='0.4')
-plt.xlabel('iteration'); plt.ylabel('objective'); plt.grid(alpha=0.3)
-"""),
         md("""
 ## Where each cell lands
 
@@ -176,16 +137,21 @@ acronym.value_counts().head(12)
         md("## The aligned atlas over the section"),
         code(f"""
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+def atlas_at(result):
+    plane = np.moveaxis(np.asarray(stalign_deformation_grid(result, direction='backward')), 0, -1)[0]
+    sampled = sample_volume(atlas, result['ref_axes'], plane.reshape(-1, 3)[:, ::-1])
+    return sampled.reshape(plane.shape[:2])
 
 section = np.asarray(sdata['section']).squeeze()
-fig, ax = plt.subplots(1, 4, figsize=(20, 5))
+fig, ax = plt.subplots(1, 3, figsize=(15, 5))
 ax[0].imshow(section, cmap=mpl.cm.Blues)
-ax[1].imshow(atlas_at(guess), cmap=mpl.cm.Reds)
-ax[2].imshow(atlas_at(fit), cmap=mpl.cm.Reds)
-ax[3].imshow(section, cmap=mpl.cm.Blues, alpha=0.9)
-ax[3].imshow(atlas_at(fit), cmap=mpl.cm.Reds, alpha=0.3)
-for a, t in zip(ax, ('{section_title}', '{initial_title}',
-                     'atlas after fitting', 'overlaid'), strict=True):
+ax[1].imshow(atlas_at(fit), cmap=mpl.cm.Reds)
+ax[2].imshow(section, cmap=mpl.cm.Blues, alpha=0.9)
+ax[2].imshow(atlas_at(fit), cmap=mpl.cm.Reds, alpha=0.3)
+for a, t in zip(ax, ('{section_title}', 'atlas after fitting', 'overlaid'), strict=True):
     a.set_title(t); a.set_xticks([]); a.set_yticks([])
 """),
         md("## Cells coloured by structure"),
@@ -203,13 +169,6 @@ ax.legend(handles=[Line2D([], [], marker='o', ls='', ms=4, color=h.get_facecolor
 """),
     ]
 
-
-GUESS_TAIL = """
-def atlas_at(result):
-    plane = np.moveaxis(np.asarray(stalign_deformation_grid(result, direction='backward')), 0, -1)[0]
-    sampled = sample_volume(atlas, result['ref_axes'], plane.reshape(-1, 3)[:, ::-1])
-    return sampled.reshape(plane.shape[:2])
-"""
 
 nb_meta = {
     "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},

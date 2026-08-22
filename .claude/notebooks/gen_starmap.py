@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
-from gen_both import GUESS_TAIL, NORM_CODE, PREP, code, md, tail, write
+from gen_both import NORM_CODE, PREP, code, md, tail, write
 
 cells = [
     md("""
@@ -85,8 +85,10 @@ print(f'section now spans {section.min():.2f} to {section.max():.2f}, mean {sect
     md("""
 ## The fit
 
-`initial_slice`, `initial_rotation` and `initial_scale` are an initialisation, not the answer --
-the full 3D deformation is fitted, so the section need not be exactly coronal.
+The starting guess only has to be close. `initial_affine` places the section in the atlas --
+an explicit matrix here rather than the `initial_*` arguments, because this dataset is
+anisotropic and `initial_scale` is a single uniform factor -- and the fit then deforms the
+volume in all three dimensions rather than searching for a flat plane through it.
 """),
     code("""
 from squidpy.experimental.tl import align_stalign_volume, stalign_deformation_grid, stalign_transform_points
@@ -126,26 +128,6 @@ initial_affine = reverse @ affine_zyx @ reverse
 # is the retuned 1e6, and letting the default supply it is the point.
 SOLVER = dict(a=250.0, nt=4, sigmaM=0.1, sigmaA=0.1, sigmaB=0.1, muA=[0.7], muB=[0.0])
 """),
-    md("""
-### Is the initialisation in the right place?
-
-`niter=0` returns the starting affine without fitting, so the initial guess can be looked at
-through the same public route as the result. Worth doing: an initialisation that starts in the
-wrong place produces a fit that never recovers, and the objective alone does not say so.
-"""),
-    code(
-        """
-guess = align_stalign_volume(
-    sdata, image_key=('atlas', 'section'), initial_affine=initial_affine, niter=0, **SOLVER
-)
-"""
-        + GUESS_TAIL
-        + """
-initial_depth = np.asarray(stalign_transform_points(guess, xy))[:, 2]
-print(f'initial guess places the section at z = {initial_depth.mean():.0f} um '
-      f'(slice {slice_index} sits at {z_axis[slice_index]:.0f} um)')
-"""
-    ),
     code("""
 fit = align_stalign_volume(
     sdata, image_key=('atlas', 'section'), initial_affine=initial_affine, niter=800, **SOLVER
@@ -153,6 +135,6 @@ fit = align_stalign_volume(
 print(f'{fit["n_iter"]} iterations, objective '
       f'{float(fit["energies"][0]):.0f} -> {float(fit["energies"][-1]):.0f}')
 """),
-] + tail("STARmap section", "atlas at the initial guess")
+] + tail("STARmap section")
 
 write("docs/notebooks/squidpy-api/starmap-allen3Datlas.ipynb", cells)

@@ -97,23 +97,6 @@ ax[0].legend(handles=[Line2D([], [], marker='o', ls='', ms=5, color=c, label=l)
                      for c, l in (('tab:blue', 'reference (S2R2)'), ('tab:orange', 'query (S2R3)'))],
              loc='lower left', fontsize=8)
 """),
-        md("""
-The objective's own trace. As in the volume notebooks, the mixture E step switches on at
-iteration 50 and the energy changes definition there, so only the part after the dashed line
-is one function.
-"""),
-        code("""
-MIXTURE_GATE = 50
-energies = np.asarray(fit['energies'])[: fit['n_iter']]
-descent = energies[MIXTURE_GATE + 1 :]
-tail = descent[-len(descent) // 10 :]
-print(f'after the gate: {descent[0]:.0f} -> {descent[-1]:.0f}, minimum {descent.min():.0f} '
-      f'at iteration {MIXTURE_GATE + 1 + int(descent.argmin())}')
-print(f'last tenth: mean {tail.mean():.0f}, spread {np.ptp(tail):.0f} '
-      f'({100 * np.ptp(tail) / tail.mean():.1f}% of its mean)')
-plt.plot(energies, lw=0.8); plt.axvline(MIXTURE_GATE, color='0.6', ls='--', lw=0.8)
-plt.xlabel('iteration'); plt.ylabel('objective'); plt.grid(alpha=0.3)
-"""),
     ],
 )
 

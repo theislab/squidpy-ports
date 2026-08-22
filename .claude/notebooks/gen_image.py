@@ -36,19 +36,6 @@ def rasterized(xy, dx):
     return sdata
 """
 
-TRACE = """
-MIXTURE_GATE = 50
-energies = np.asarray(fit['energies'])[: fit['n_iter']]
-descent = energies[MIXTURE_GATE + 1 :]
-tail = descent[-max(len(descent) // 10, 1) :]
-print(f'after the gate: {descent[0]:.0f} -> {descent[-1]:.0f}, minimum {descent.min():.0f} '
-      f'at iteration {MIXTURE_GATE + 1 + int(descent.argmin())}')
-print(f'last tenth: mean {tail.mean():.0f}, spread {np.ptp(tail):.0f} '
-      f'({100 * np.ptp(tail) / tail.mean():.1f}% of its mean)')
-plt.plot(energies, lw=0.8); plt.axvline(MIXTURE_GATE, color='0.6', ls='--', lw=0.8)
-plt.xlabel('iteration'); plt.ylabel('objective'); plt.grid(alpha=0.3)
-"""
-
 # ------------------------------------------------------------------ xenium-heimage
 write(
     "docs/notebooks/squidpy-api/xenium-heimage.ipynb",
@@ -161,8 +148,6 @@ ax[1].set_title('Xenium cell density warped onto it'); ax[1].legend(fontsize=8)
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
 """),
-        md("## The objective's trace"),
-        code(TRACE),
     ],
 )
 
@@ -244,8 +229,6 @@ ax[1].set_title('MERFISH cells placed on it')
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
 """),
-        md("## The objective's trace"),
-        code(TRACE),
     ],
 )
 
@@ -344,7 +327,5 @@ ax[1].set_title('MERFISH cells placed on it')
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
 """),
-        md("## The objective's trace"),
-        code(TRACE),
     ],
 )

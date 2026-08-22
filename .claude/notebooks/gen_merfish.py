@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
-from gen_both import GUESS_TAIL, NORM_CODE, NORM_MD, PREP, code, md, tail, write
+from gen_both import NORM_CODE, NORM_MD, PREP, code, md, tail, write
 
 cells = [
     md("""
@@ -94,30 +94,6 @@ slice_index, rotation, scale = 177, 0.0, 0.9
 # is the retuned 1e6, and letting the default supply it is the point.
 SOLVER = dict(a=500.0, nt=4, sigmaM=2.0, sigmaA=2.0, sigmaB=2.0, muA=[3.0], muB=[0.0])
 """),
-    md("""
-### Is the initialisation in the right place?
-
-`niter=0` returns the starting affine without fitting, so the initial guess can be looked at
-through the same public route as the result. Worth doing: an initialisation that starts in the
-wrong place produces a fit that never recovers, and the objective alone does not say so.
-"""),
-    code(
-        """
-guess = align_stalign_volume(
-    sdata, image_key=('atlas', 'section'), niter=0,
-    initial_slice=slice_index, initial_rotation=rotation, initial_scale=scale, **SOLVER,
-)
-"""
-        + GUESS_TAIL
-        + """
-# A fit reports the reference axes it read off the element, so the depth of the chosen slice
-# needs no second derivation from the NRRD header -- and cannot disagree with the one used.
-z_axis = np.asarray(guess['ref_axes'][0])
-initial_depth = np.asarray(stalign_transform_points(guess, xy))[:, 2]
-print(f'initial guess places the section at z = {initial_depth.mean():.0f} um '
-      f'(slice {slice_index} sits at {z_axis[slice_index]:.0f} um)')
-"""
-    ),
     code("""
 fit = align_stalign_volume(
     sdata, image_key=('atlas', 'section'), niter=2000,
@@ -126,6 +102,6 @@ fit = align_stalign_volume(
 print(f'{fit["n_iter"]} iterations, objective '
       f'{float(fit["energies"][0]):.0f} -> {float(fit["energies"][-1]):.0f}')
 """),
-] + tail("MERFISH section", "atlas at the initial guess")
+] + tail("MERFISH section")
 
 write("docs/notebooks/squidpy-api/merfish-allen3Datlas.ipynb", cells)
