@@ -73,7 +73,7 @@ _IMAGE_KEY = "replay"
 def as_sdata(array: np.ndarray, axes: Sequence[np.ndarray]) -> Any:
     """Wrap a channels-first array and its axes as a one-image ``SpatialData``.
 
-    The public ``align_stalign_*`` entry points read an element's physical axes off the
+    The public ``stalign_align_*`` entry points read an element's physical axes off the
     scale and translation it carries into a coordinate system, so the axes upstream passed
     are expressed as exactly that -- see :func:`axis_placement` for the part of this that
     cannot be made exact.
@@ -110,7 +110,7 @@ def _channels_first(image: Any, *, ndim: int) -> np.ndarray:
 def solver_keys() -> frozenset[str]:
     """Every tuning keyword the public API declares, read off its public TypedDicts.
 
-    These are what the ``align_stalign_*`` entry points accept, so they are what a captured
+    These are what the ``stalign_align_*`` entry points accept, so they are what a captured
     upstream keyword may be forwarded as. Read from squidpy rather than listed here, and
     from its *public* surface rather than from ``lddmm``'s signature: the TypedDicts are
     exported, so unlike the kernel they carry a stability contract.

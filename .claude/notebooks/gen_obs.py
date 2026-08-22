@@ -209,16 +209,16 @@ print(f'{{ref.n_obs}} reference cells, {{query.n_obs}} query cells, '
 
 {blurb}
 
-Upstream's equivalent is `{upstream}`. One call does the alignment: `align_stalign_obs` fits a
+Upstream's equivalent is `{upstream}`. One call does the alignment: `stalign_align_obs` fits a
 diffeomorphism straight between two point clouds, rasterizing both sides itself.
 """),
             md("## Inputs"),
             code(load),
             md("## The fit\n\nUpstream's own solver values, and squidpy's defaults for everything else."),
             code(f"""
-from squidpy.experimental.tl import align_stalign_obs, stalign_apply_transform
+from squidpy.experimental.tl import stalign_align_obs, stalign_apply_transform
 
-fit = align_stalign_obs(
+fit = stalign_align_obs(
     {fit_args}
 )
 print(f'{{fit["n_iter"]}} iterations, objective '
@@ -261,6 +261,13 @@ for a, (pts, title) in zip(ax, [(query.obsm['spatial'], 'before'),
 ax[0].legend(handles=[Line2D([], [], marker='o', ls='', ms=5, color=c, label=l)
                      for c, l in (('tab:blue', 'reference'), ('tab:orange', 'query'))],
              loc='lower left', fontsize=8)
+"""),
+            md("## Convergence"),
+            code("""
+energies = np.asarray(fit['energies'])[: fit['n_iter']]
+plt.figure(figsize=(5, 3))
+plt.plot(energies, lw=0.8)
+plt.xlabel('iteration'); plt.ylabel('objective'); plt.grid(alpha=0.3)
 """),
         ],
     )

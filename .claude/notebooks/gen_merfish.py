@@ -81,7 +81,7 @@ the next cell checks the initialisation directly, so it is left out here rather 
 reintroducing a hand-built affine to carry it.
 """),
     code("""
-from squidpy.experimental.tl import align_stalign_volume, stalign_deformation_grid, stalign_transform_points
+from squidpy.experimental.tl import stalign_align_volume, stalign_deformation_grid, stalign_transform_points
 
 slice_index, rotation, scale = 177, 0.0, 0.9
 
@@ -95,7 +95,7 @@ slice_index, rotation, scale = 177, 0.0, 0.9
 SOLVER = dict(a=500.0, nt=4, sigmaM=2.0, sigmaA=2.0, sigmaB=2.0, muA=[3.0], muB=[0.0])
 """),
     code("""
-fit = align_stalign_volume(
+fit = stalign_align_volume(
     sdata, image_key=('atlas', 'section'), niter=2000,
     initial_slice=slice_index, initial_rotation=rotation, initial_scale=scale, **SOLVER,
 )

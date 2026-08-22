@@ -8,7 +8,7 @@ cells = [
 # Placing a STARmap section in the Allen CCF
 
 A 2D section fitted into a 3D reference volume, entirely through squidpy's public API:
-`rasterize_points` -> `align_stalign_volume` -> `stalign_transform_points` -> `sample_volume`.
+`rasterize_points` -> `stalign_align_volume` -> `stalign_transform_points` -> `sample_volume`.
 """),
     md("""
 ## Inputs
@@ -91,7 +91,7 @@ anisotropic and `initial_scale` is a single uniform factor -- and the fit then d
 volume in all three dimensions rather than searching for a flat plane through it.
 """),
     code("""
-from squidpy.experimental.tl import align_stalign_volume, stalign_deformation_grid, stalign_transform_points
+from squidpy.experimental.tl import stalign_align_volume, stalign_deformation_grid, stalign_transform_points
 
 def physical_axes(element, axes):
     matrix = get_transformation(element, 'global').to_affine_matrix(input_axes=axes, output_axes=axes)
@@ -129,7 +129,7 @@ initial_affine = reverse @ affine_zyx @ reverse
 SOLVER = dict(a=250.0, nt=4, sigmaM=0.1, sigmaA=0.1, sigmaB=0.1, muA=[0.7], muB=[0.0])
 """),
     code("""
-fit = align_stalign_volume(
+fit = stalign_align_volume(
     sdata, image_key=('atlas', 'section'), initial_affine=initial_affine, niter=800, **SOLVER
 )
 print(f'{fit["n_iter"]} iterations, objective '

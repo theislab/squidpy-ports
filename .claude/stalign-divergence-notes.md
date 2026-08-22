@@ -93,11 +93,11 @@ thing not in git is the cluster output, which is on Lustre.
 - [ ] **Rewrite the remaining sixteen notebooks against the public API.** The template is
   `docs/notebooks/squidpy-api/starmap-allen3Datlas.ipynb` (pushed, executed on an H100). It
   shows the shape: no upstream call, no replay harness, `rasterize_points` ->
-  `align_stalign_volume` -> `Stalign3DResult.transform` -> `sample_volume`. What is left:
+  `stalign_align_volume` -> `Stalign3DResult.transform` -> `sample_volume`. What is left:
 
     - `merfish-allen3Datlas` -- the other rank-3 one, same shape, `dx=10` so no D14 exposure.
-    - the fourteen rank-2 notebooks -- these map onto `align_stalign_image` /
-      `align_stalign_obs`, a different and simpler shape than the volume case. Not attempted.
+    - the fourteen rank-2 notebooks -- these map onto `stalign_align_image` /
+      `stalign_align_obs`, a different and simpler shape than the volume case. Not attempted.
     - `merfish-merfish-alignment-affine-only-with-points` -- landmark affine only,
       `align_landmarks(fit="affine")`.
 
@@ -132,13 +132,13 @@ thing not in git is the cluster output, which is on Lustre.
   re-expression of upstream's notebooks through the public API, so a reader can put ours beside
   theirs, and the file names have to carry that.
 
-  Written so far: `starmap-allen3Datlas`, `merfish-allen3Datlas` (volume, `align_stalign_volume`);
-  `merfish-merfish` (`align_stalign_obs`), `merfish-merfish-affine-only-with-points`
-  (`align_landmarks`), `merfish-visium` (`align_stalign_image`). The remaining twelve are the
+  Written so far: `starmap-allen3Datlas`, `merfish-allen3Datlas` (volume, `stalign_align_volume`);
+  `merfish-merfish` (`stalign_align_obs`), `merfish-merfish-affine-only-with-points`
+  (`align_landmarks`), `merfish-visium` (`stalign_align_image`). The remaining twelve are the
   same three planar routes on different files -- `merfish-xenium`, `xenium-xenium`,
   `xenium-starmap`, `visium-visium-affine-only`, both `heart` ones and the three other
-  `merfish-merfish` variants onto `align_stalign_obs`; `xenium-heimage` and
-  `merfish-visium-with-point-annotator` onto `align_stalign_image`.
+  `merfish-merfish` variants onto `stalign_align_obs`; `xenium-heimage` and
+  `merfish-visium-with-point-annotator` onto `stalign_align_image`.
 
   That also answers the first open question above by default: **the notebooks stop being a
   comparison.** Parity stays where it already runs -- the replay sweep

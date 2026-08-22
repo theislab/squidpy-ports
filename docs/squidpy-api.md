@@ -12,9 +12,9 @@ Nothing here reaches into a private module. Four calls cover every case:
 | call | when |
 | --- | --- |
 | `align_landmarks` | paired points, closed-form affine, no iteration |
-| `align_stalign_obs` | two point clouds; it rasterizes both sides itself |
-| `align_stalign_image` | one side is an image, so the other is rasterized onto its grid |
-| `align_stalign_volume` | a 2D section into a 3D reference volume |
+| `stalign_align_obs` | two point clouds; it rasterizes both sides itself |
+| `stalign_align_image` | one side is an image, so the other is rasterized onto its grid |
+| `stalign_align_volume` | a 2D section into a 3D reference volume |
 
 Each notebook links the upstream analysis it mirrors, and every function it calls links to its
 source. Where a notebook departs from upstream — a different raster scale, a different starting

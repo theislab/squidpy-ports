@@ -34,21 +34,21 @@ from squidpy.experimental.im import sample_volume  # noqa: E402
 from squidpy.experimental.tl import (  # noqa: E402
     Stalign2DResult,
     Stalign3DResult,
-    align_stalign_image,
-    align_stalign_obs,
-    align_stalign_volume,
+    stalign_align_image,
+    stalign_align_obs,
+    stalign_align_volume,
     stalign_deformation_grid,
     stalign_transform_points,
     stalign_warp_image,
 )
 
 # The estimators stay private on purpose: this module's job is to pin the *kernel* against
-# upstream at the same axes, and the public `align_stalign_*` entry points take an element's
+# upstream at the same axes, and the public `stalign_align_*` entry points take an element's
 # placement rather than its axes -- squidpy rebuilds them from a `Scale`/`Translation`, which
 # is not bit-exact for every grid (see `tests._replay.axis_placement`). A comparison that
 # asserts agreement at ~1e-15 cannot afford the harness perturbing its own inputs.
 #
-# The obs case is the exception and goes through the public `align_stalign_obs`: it starts
+# The obs case is the exception and goes through the public `stalign_align_obs`: it starts
 # from points, which `obsm` stores verbatim, so there is no placement to reconstruct.
 from squidpy.experimental.tl._align._stalign import (  # noqa: E402
     fit_stalign_image,
@@ -675,7 +675,7 @@ def test_affine_from_points_is_equivalent_when_well_conditioned(primitives, reco
     # array-level estimator does. `niter=0` fits nothing, so the returned affine *is* the
     # landmark initialisation -- which also pins the wiring, that `landmarks_*` really do
     # reach the solver as its starting affine.
-    fit = align_stalign_obs(
+    fit = stalign_align_obs(
         wrap(primitives["ref"]),
         wrap(primitives["query"]),
         landmarks_query=primitives["landmarks_query"],
@@ -812,7 +812,7 @@ def _harness_shaped_fit(fixture, *, swap_roles=False):
     # `query` is the moving side, so upstream's `I` goes in second. Swapped on request, which
     # is what this guards against.
     first, second = (moving, fixed) if swap_roles else (fixed, moving)
-    return align_stalign_image(
+    return stalign_align_image(
         first, second, image_key=_IMAGE_KEY, initial_affine=affine, niter=_IMAGE_ITERS, **_IMAGE_PARAMS
     )
 
@@ -1432,7 +1432,7 @@ def _harness_shaped_volume_fit(fixture, niter=_SLICE_ITERS):
     reference_axes = [np.asarray(fixture[f"ref_axis_{axis}"]) for axis in range(3)]
     section_axes = [np.asarray(fixture[f"query_axis_{axis}"]) for axis in range(2)]
     forwarded = {"niter": niter, "diffeo_start": niter + 1, "sigmaP": 2e1, **_SLICE_PARAMS}
-    return align_stalign_volume(
+    return stalign_align_volume(
         as_sdata(_channels_first(fixture["ref"], ndim=3), reference_axes),
         as_sdata(_channels_first(fixture["query"], ndim=2), section_axes),
         image_key=_IMAGE_KEY,

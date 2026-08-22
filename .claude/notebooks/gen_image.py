@@ -12,7 +12,7 @@ import numpy as np, pandas as pd, spatialdata as sd
 from spatialdata.models import Image2DModel, PointsModel
 from spatialdata.transformations import get_transformation
 from squidpy.experimental.im import rasterize_points
-from squidpy.experimental.tl import align_stalign_image, stalign_transform_points
+from squidpy.experimental.tl import stalign_align_image, stalign_transform_points
 
 # `sigmaM`, `sigmaB` and `sigmaA` are in the images' own intensity units, and upstream states
 # its values for both sides mapped onto [0, 1]. A raw density raster of 167k cells has a mean
@@ -36,6 +36,13 @@ def rasterized(xy, dx):
     return sdata
 """
 
+CONV = """
+energies = np.asarray(fit['energies'])[: fit['n_iter']]
+plt.figure(figsize=(5, 3))
+plt.plot(energies, lw=0.8)
+plt.xlabel('iteration'); plt.ylabel('objective'); plt.grid(alpha=0.3)
+"""
+
 # ------------------------------------------------------------------ xenium-heimage
 write(
     "docs/notebooks/squidpy-api/xenium-heimage.ipynb",
@@ -43,7 +50,7 @@ write(
         md("""
 # Aligning Xenium cells with their H&E image
 
-`align_stalign_image` fits image to image, so the cell cloud is rasterized first and the H&E is
+`stalign_align_image` fits image to image, so the cell cloud is rasterized first and the H&E is
 matched against that raster. Upstream's equivalent is `xenium-heimage-alignment`.
 
 **Which side is the reference matters here, and it is not a presentation choice.** The objective
@@ -93,7 +100,7 @@ it raises `IndexError` inside the initialisation path, so the starting affine ca
 the way the volume notebooks inspect theirs.
 """),
         code("""
-fit = align_stalign_image(
+fit = stalign_align_image(
     section, image, image_key=('section', 'he'),
     landmarks_ref=landmarks_cells, landmarks_query=landmarks_he,
     niter=2000, sigmaM=0.15, sigmaB=0.10, sigmaA=0.11, epV=10,
@@ -148,6 +155,8 @@ ax[1].set_title('Xenium cell density warped onto it'); ax[1].legend(fontsize=8)
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
 """),
+        md("## Convergence"),
+        code(CONV),
     ],
 )
 
@@ -196,7 +205,7 @@ print(f'{len(paired["ref"])} pairs over {len(regions)} regions: {", ".join(regio
 """),
         md("## The fit\n\nUpstream's own solver values, which differ from the hardcoded-landmark variant."),
         code("""
-fit = align_stalign_image(
+fit = stalign_align_image(
     visium, merfish, image_key=('he', 'section'),
     landmarks_ref=paired['ref'], landmarks_query=paired['query'],
     niter=200, sigmaM=0.18, sigmaB=0.18, sigmaA=0.18, sigmaP=2e-1,
@@ -229,6 +238,8 @@ ax[1].set_title('MERFISH cells placed on it')
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
 """),
+        md("## Convergence"),
+        code(CONV),
     ],
 )
 
@@ -300,7 +311,7 @@ for a in ax:
 """),
         md("## The fit"),
         code("""
-fit = align_stalign_image(
+fit = stalign_align_image(
     visium, merfish, image_key=('he', 'section'),
     landmarks_ref=paired['ref'], landmarks_query=paired['query'],
     niter=200, sigmaM=0.18, sigmaB=0.18, sigmaA=0.18, sigmaP=2e-1,
@@ -327,5 +338,7 @@ ax[1].set_title('MERFISH cells placed on it')
 for a in ax:
     a.set_xticks([]); a.set_yticks([])
 """),
+        md("## Convergence"),
+        code(CONV),
     ],
 )

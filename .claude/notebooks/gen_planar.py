@@ -37,7 +37,7 @@ write(
 # Aligning two MERFISH sections
 
 Two replicate sections of the same tissue brought into a common frame, entirely through
-squidpy's public API: `align_stalign_obs` fits a diffeomorphism directly between two point
+squidpy's public API: `stalign_align_obs` fits a diffeomorphism directly between two point
 clouds, rasterizing both sides itself.
 
 Upstream's equivalent is `merfish-merfish-alignment`, which rotates the source by hand before
@@ -56,9 +56,9 @@ them rather than merely started there.
 30 um and 1.5, and `epV=50` is its one departure from the solver defaults.
 """),
         code("""
-from squidpy.experimental.tl import align_stalign_obs, stalign_apply_transform
+from squidpy.experimental.tl import stalign_align_obs, stalign_apply_transform
 
-fit = align_stalign_obs(
+fit = stalign_align_obs(
     ref, query, spatial_key='spatial',
     landmarks_ref=landmarks[2], landmarks_query=landmarks[3],
     dx=30.0, blur=1.5, niter=10000, epV=50,
@@ -96,6 +96,13 @@ for a, (pts, title) in zip(ax, [
 ax[0].legend(handles=[Line2D([], [], marker='o', ls='', ms=5, color=c, label=l)
                      for c, l in (('tab:blue', 'reference (S2R2)'), ('tab:orange', 'query (S2R3)'))],
              loc='lower left', fontsize=8)
+"""),
+        md("## Convergence"),
+        code("""
+energies = np.asarray(fit['energies'])[: fit['n_iter']]
+plt.figure(figsize=(5, 3))
+plt.plot(energies, lw=0.8)
+plt.xlabel('iteration'); plt.ylabel('objective'); plt.grid(alpha=0.3)
 """),
     ],
 )
@@ -142,7 +149,7 @@ print('affine:'); print(fits['affine'].round(3))
 
 Six degrees of freedom is the whole model here, so the two point clouds agree where the tissue
 moved rigidly and disagree wherever it deformed. That residual disagreement is exactly what
-`align_stalign_obs` exists to absorb -- see `merfish-merfish`.
+`stalign_align_obs` exists to absorb -- see `merfish-merfish`.
 """),
         code("""
 import matplotlib.pyplot as plt
@@ -175,7 +182,7 @@ write(
 # Placing MERFISH cells on a Visium H&E image
 
 When one side is an image there is nothing to rasterize it into, so the *other* side is
-rasterized instead and `align_stalign_image` fits image to image.
+rasterized instead and `stalign_align_image` fits image to image.
 
 The two live in different units -- microns for the MERFISH section, pixels for the H&E -- and
 neither is restated anywhere: each element carries its own placement and the solver reads the
@@ -243,9 +250,9 @@ matters more here than in the point-cloud case: the two modalities do not share 
 scale, so the landmarks carry much of the correspondence.
 """),
         code("""
-from squidpy.experimental.tl import align_stalign_image, stalign_transform_points
+from squidpy.experimental.tl import stalign_align_image, stalign_transform_points
 
-fit = align_stalign_image(
+fit = stalign_align_image(
     visium, merfish, image_key=('he', 'section'),
     landmarks_ref=paired['ref'], landmarks_query=paired['query'],
     niter=200, sigmaM=0.2, sigmaB=0.19, sigmaA=0.3, sigmaP=2e-1,

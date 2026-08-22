@@ -474,7 +474,7 @@ def _write_image_mixed_units(st, clouds: F.Clouds, out: Path) -> None:
     unit and any confusion between them is invisible. Real pairs do not: an H&E in pixels
     against a density rasterised in microns is the ordinary case, and it is the case
     `xenium-heimage-alignment` is. Nothing measured the velocity grid there until
-    `align_stalign_image` began reading each element's real placement, at which point the
+    `stalign_align_image` began reading each element's real placement, at which point the
     grid moved by two orders of magnitude -- see ledger row D12.
 
     `a` is deliberately *not* rescaled. Upstream builds the velocity grid from the source's

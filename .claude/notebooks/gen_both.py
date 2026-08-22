@@ -28,14 +28,14 @@ UPSTREAM = {
 #: fork branch and are absent from squidpy's published API docs, so an intersphinx role would be
 #: an unresolved reference and `nitpicky = True` plus `-W` would fail the build. Linking to the
 #: source at a pinned revision is clickable, exact, and cannot rot into pointing at something else.
-SQUIDPY_REV = "e9a94c4d125fc3ac7b791a8ce6c6ff58e1e885e4"
+SQUIDPY_REV = "7ff381e961589351779c89219e54cf4081efeb2a"
 _SRC = f"https://github.com/selmanozleyen/squidpy/blob/{SQUIDPY_REV}/src/squidpy"
 API = {
     "rasterize_points": "experimental/im/_rasterize_points.py",
     "sample_volume": "experimental/im/_rasterize_points.py",
-    "align_stalign_obs": "experimental/tl/_align/_api.py",
-    "align_stalign_image": "experimental/tl/_align/_api.py",
-    "align_stalign_volume": "experimental/tl/_align/_api.py",
+    "stalign_align_obs": "experimental/tl/_align/_api.py",
+    "stalign_align_image": "experimental/tl/_align/_api.py",
+    "stalign_align_volume": "experimental/tl/_align/_api.py",
     "align_landmarks": "experimental/tl/_align/_api.py",
     "stalign_apply_transform": "experimental/tl/_align/_api.py",
     "stalign_apply_warp": "experimental/tl/_align/_api.py",
@@ -111,8 +111,17 @@ def mean_normalised(sdata, key):
 
 
 def tail(section_title):
-    """The cells every volume notebook ends with: placement, ontology, panels."""
+    """The cells every volume notebook ends with: convergence, placement, ontology, panels."""
     return [
+        md("## Convergence"),
+        code("""
+import matplotlib.pyplot as plt
+
+energies = np.asarray(fit['energies'])[: fit['n_iter']]
+plt.figure(figsize=(5, 3))
+plt.plot(energies, lw=0.8)
+plt.xlabel('iteration'); plt.ylabel('objective'); plt.grid(alpha=0.3)
+"""),
         md("""
 ## Where each cell lands
 
@@ -137,7 +146,6 @@ acronym.value_counts().head(12)
         md("## The aligned atlas over the section"),
         code(f"""
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 def atlas_at(result):
