@@ -32,14 +32,12 @@ import anndata as ad  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 from squidpy.experimental.im import sample_volume  # noqa: E402
 from squidpy.experimental.tl import (  # noqa: E402
-    Stalign2DResult,
-    Stalign3DResult,
+    StalignImageFit,
+    StalignObsFit,
+    StalignVolumeFit,
     stalign_align_image,
     stalign_align_obs,
     stalign_align_volume,
-    stalign_deformation_grid,
-    stalign_transform_points,
-    stalign_warp_image,
 )
 
 # The estimators stay private on purpose: this module's job is to pin the *kernel* against
@@ -180,13 +178,12 @@ def velocity_grid(primitives):
 
 @pytest.fixture(scope="session")
 def fitted(primitives, velocity_grid):
-    """A :class:`Stalign2DResult` carrying upstream's own fitted deformation.
+    """A :class:`StalignObsFit` carrying upstream's own fitted deformation.
 
     Point transforms are compared through the public result object rather than the
     internal row-col helper, so what is pinned is what callers actually reach.
     """
-    return Stalign2DResult(
-        rank=2,
+    return StalignObsFit(
         affine=jnp.asarray(primitives["to_A"]),
         velocity=jnp.asarray(primitives["velocity"]),
         velocity_grid=velocity_grid,
@@ -194,14 +191,14 @@ def fitted(primitives, velocity_grid):
     )
 
 
-def _transform_rc(result: Stalign2DResult, points_rc, *, direction: str = "forward") -> np.ndarray:
-    """``stalign_transform_points`` on row-col points, for comparison with upstream.
+def _transform_rc(result: StalignObsFit, points_rc, *, direction: str = "forward") -> np.ndarray:
+    """``transform_points`` on row-col points, for comparison with upstream.
 
     The public API speaks ``(x, y)`` and the reference speaks row-col, so the flip that
     it performs internally is undone on both sides here. Anything the flip
     itself got wrong would still show up -- it is applied, not bypassed.
     """
-    got = stalign_transform_points(result, np.asarray(points_rc)[:, ::-1], direction=direction)
+    got = result.transform_points(np.asarray(points_rc)[:, ::-1], direction=direction)
     return np.asarray(got)[:, ::-1]
 
 
@@ -304,7 +301,7 @@ def test_regularizer_matches_upstream(primitives, velocity_grid, record_property
 
 
 def test_transform_grid_backward_matches_upstream(primitives, source_grid, target_grid, velocity_grid, record_property):
-    """``stalign_deformation_grid(direction='backward')`` at rank 2 vs ``STalign.build_transform('b')``.
+    """``deformation_grid(direction='backward')`` at rank 2 vs ``STalign.build_transform('b')``.
 
     This is the inner loop of the objective: invert the affine, then integrate ``-v``
     backwards in time. Upstream returns ``(H, W, 2)``; squidpy returns ``(2, H, W)``.
@@ -315,47 +312,44 @@ def test_transform_grid_backward_matches_upstream(primitives, source_grid, targe
     """
     axes, _ = target_grid
     query_axes, _ = source_grid
-    result = Stalign2DResult(
-        rank=2,
+    result = StalignObsFit(
         affine=jnp.asarray(primitives["to_A"]),
         velocity=jnp.asarray(primitives["velocity"]),
         velocity_grid=velocity_grid,
     )
     # Backward evaluates the *reference* grid in the query frame, so the grid under test
     # goes in as `ref_axes`; the query side is only there to satisfy the guard.
-    got = stalign_deformation_grid(result, direction="backward", query_axes=query_axes, ref_axes=axes)
+    got = result.deformation_grid(direction="backward", query_axes=query_axes, ref_axes=axes)
     error = rel(np.moveaxis(np.asarray(got), 0, -1), primitives["grid_backward"])
     record_property("rel_error", error)
     assert error < EXACT
 
 
 def test_warp_image_uses_the_upstream_grid(primitives, source_grid, target_grid, velocity_grid, record_property):
-    """``stalign_warp_image`` vs sampling on upstream's own backward grid.
+    """``warp_image`` vs sampling on upstream's own backward grid.
 
     Each half was already checked against upstream separately; feeding upstream's
     ``grid_backward`` through the same interpolation isolates the composition.
     """
     source_axes, source_image = source_grid
     target_axes, _ = target_grid
-    result = Stalign2DResult(
-        rank=2,
+    result = StalignImageFit(
         affine=jnp.asarray(primitives["to_A"]),
         velocity=jnp.asarray(primitives["velocity"]),
         velocity_grid=velocity_grid,
-        aligned_points=jnp.zeros((0, 2)),
         query_axes=source_axes,
         ref_axes=target_axes,
     )
     upstream_grid = jnp.asarray(np.moveaxis(np.asarray(primitives["grid_backward"]), -1, 0))
     expected = _core.interp(source_axes, source_image, upstream_grid)
 
-    error = rel(stalign_warp_image(result, source_image), expected)
+    error = rel(result.warp_image(source_image), expected)
     record_property("rel_error", error)
     assert error < EXACT
 
 
 def test_transform_points_forward_matches_upstream(fitted, primitives, record_property):
-    """``stalign_transform_points`` at rank 2 vs ``STalign.transform_points_source_to_target``."""
+    """``transform_points`` at rank 2 vs ``STalign.transform_points_source_to_target``."""
     got = _transform_rc(fitted, primitives["points"])
     error = rel(got, primitives["points_forward"])
     record_property("rel_error", error)
@@ -964,22 +958,20 @@ def test_image_energy_trace_matches_upstream(image_reference, record_property):
 
 
 def test_image_warp_matches_upstream(image_reference, record_property):
-    """``stalign_warp_image`` vs ``STalign.transform_image_source_to_target``.
+    """``warp_image`` vs ``STalign.transform_image_source_to_target``.
 
     Exactly what ``stalign_apply_warp`` writes, against upstream's own
     image-warping composition rather than a reassembled one.
     """
     result = _run_image(image_reference)
-    fit = Stalign2DResult(
-        rank=2,
+    fit = StalignImageFit(
         affine=result["A"],
         velocity=result["v"],
         velocity_grid=result["xv"],
-        aligned_points=jnp.zeros((0, 2)),
         query_axes=(jnp.asarray(image_reference["source_axis_0"]), jnp.asarray(image_reference["source_axis_1"])),
         ref_axes=(jnp.asarray(image_reference["target_axis_0"]), jnp.asarray(image_reference["target_axis_1"])),
     )
-    error = rel(stalign_warp_image(fit, jnp.asarray(image_reference["query"])), image_reference["warped"])
+    error = rel(fit.warp_image(jnp.asarray(image_reference["query"])), image_reference["warped"])
     record_property("rel_error", error)
     assert error < 1e-9
 
@@ -1056,8 +1048,7 @@ def test_converged_solution_matches_upstream(bundle, primitives, record_property
     assert after < 0.4 * F.RASTER_PARAMS["dx"], f"reference did not converge: TRE {after:.2f}"
     assert after < before / 5.0, f"reference barely moved: TRE {before:.2f} -> {after:.2f}"
 
-    converged = Stalign2DResult(
-        rank=2,
+    converged = StalignObsFit(
         affine=result["A"],
         velocity=result["v"],
         velocity_grid=result["xv"],
@@ -1170,7 +1161,7 @@ def test_slice_interp_matches_upstream(slice_reference, slice_axes, order, key, 
 
 
 def test_slice_grid_backward_matches_upstream(slice_reference, slice_axes, record_property):
-    """``stalign_deformation_grid(direction='backward')`` at rank 3 vs ``build_transform3D``.
+    """``deformation_grid(direction='backward')`` at rank 3 vs ``build_transform3D``.
 
     Upstream's 3D backward integration runs in reversed time order (STalign.py:1474), the
     same order squidpy uses -- so a known divergence, which pins a real disagreement on the 2D
@@ -1181,15 +1172,14 @@ def test_slice_grid_backward_matches_upstream(slice_reference, slice_axes, recor
     """
     reference, section = slice_axes
     xv = tuple(jnp.asarray(slice_reference[f"xv_{axis}"]) for axis in range(3))
-    result = Stalign3DResult(
-        rank=3,
+    result = StalignVolumeFit(
         affine=jnp.asarray(slice_reference["A"]),
         velocity=jnp.asarray(slice_reference["velocity"]),
         velocity_grid=xv,
         ref_axes=reference,
         query_axes=section,
     )
-    got = stalign_deformation_grid(result, direction="backward")
+    got = result.deformation_grid(direction="backward")
     error = rel(np.moveaxis(np.asarray(got), 0, -1), slice_reference["grid_backward"])
     record_property("rel_error", error)
     assert error < EXACT
@@ -1257,7 +1247,7 @@ def test_slice_fixture_actually_descends(slice_reference):
 
 
 def test_slice_transform_matches_upstream_coords(slice_reference, slice_axes, record_property):
-    """``stalign_transform_points`` at rank 3 vs upstream's ``coord0``/``coord1``/``coord2``.
+    """``transform_points`` at rank 3 vs upstream's ``coord0``/``coord1``/``coord2``.
 
     ``analyze3Dalign`` builds those by indexing ``build_transform3D``'s output at each cell's
     nearest raster cell (STalign.py:2001-2003); evaluating on the section's own grid points
@@ -1265,8 +1255,7 @@ def test_slice_transform_matches_upstream_coords(slice_reference, slice_axes, re
     ``z = 0``, the backward integration, and the ``(z, y, x)`` -> ``(x, y, z)`` reversal.
     """
     reference, section = slice_axes
-    result = Stalign3DResult(
-        rank=3,
+    result = StalignVolumeFit(
         affine=jnp.asarray(slice_reference["A"]),
         velocity=jnp.asarray(slice_reference["velocity"]),
         velocity_grid=tuple(jnp.asarray(slice_reference[f"xv_{axis}"]) for axis in range(3)),
@@ -1276,7 +1265,7 @@ def test_slice_transform_matches_upstream_coords(slice_reference, slice_axes, re
     rows, cols = np.meshgrid(np.asarray(section[0]), np.asarray(section[1]), indexing="ij")
     points_xy = np.column_stack((cols.reshape(-1), rows.reshape(-1)))
 
-    got = np.asarray(stalign_transform_points(result, points_xy))
+    got = np.asarray(result.transform_points(points_xy))
     # `build_transform3D` is what `analyze3Dalign` calls, and it stores `(z, y, x)`;
     # the public function returns `(x, y, z)`.
     expected = np.asarray(slice_reference["grid_backward"])[0].reshape(-1, 3)[:, ::-1]
@@ -1286,15 +1275,14 @@ def test_slice_transform_matches_upstream_coords(slice_reference, slice_axes, re
 
 
 def test_slice_transform_matches_the_solver_own_sampling_grid(slice_reference, slice_axes, record_property):
-    """``stalign_transform_points`` vs ``Xs``, the grid the fitted loop itself sampled the volume through.
+    """``transform_points`` vs ``Xs``, the grid the fitted loop itself sampled the volume through.
 
     ``Xs`` comes from the frozen-velocity run, so this is the affine-only map: it says the
     public function reproduces what the solver actually did, not what a separate upstream helper
     would do. Pairs with ``A_stale`` rather than ``A``, per a known divergence.
     """
     reference, section = slice_axes
-    result = Stalign3DResult(
-        rank=3,
+    result = StalignVolumeFit(
         affine=jnp.asarray(slice_reference["A_stale"]),
         velocity=jnp.zeros_like(jnp.asarray(slice_reference["velocity"])),
         velocity_grid=tuple(jnp.asarray(slice_reference[f"xv_{axis}"]) for axis in range(3)),
@@ -1304,7 +1292,7 @@ def test_slice_transform_matches_the_solver_own_sampling_grid(slice_reference, s
     rows, cols = np.meshgrid(np.asarray(section[0]), np.asarray(section[1]), indexing="ij")
     points_xy = np.column_stack((cols.reshape(-1), rows.reshape(-1)))
 
-    got = np.asarray(stalign_transform_points(result, points_xy))
+    got = np.asarray(result.transform_points(points_xy))
     expected = np.asarray(slice_reference["Xs"])[0].reshape(-1, 3)[:, ::-1]
     error = rel(got, expected)
     record_property("rel_error", error)
@@ -1315,7 +1303,7 @@ def test_slice_transform_matches_the_solver_own_sampling_grid(slice_reference, s
 def test_slice_sample_volume_matches_upstream(slice_reference, slice_axes, order, key, record_property):
     """``im.sample_volume`` vs ``interp3D`` on upstream's own backward grid.
 
-    The second half of the composition callers actually reach -- ``stalign_transform_points`` puts a cell in
+    The second half of the composition callers actually reach -- ``transform_points`` puts a cell in
     the reference frame, this reads the volume there, and that pair is how a cell gets an
     atlas value. Upstream's own grid goes in rather than that function's output, so a failure
     here is the interpolator and not the map.
