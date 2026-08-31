@@ -20,7 +20,7 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 
 | | |
 | --- | --- |
-| **squidpy API equivalence** | [Sixteen of STalign's seventeen analyses][api], rewritten against `squidpy.experimental.tl.align` and executed on a GPU — one page per upstream notebook, each linking the original it mirrors. |
+| **squidpy API equivalence** | [Sixteen of STalign's seventeen analyses][api], rewritten against `squidpy.experimental.tl` and executed on a GPU — one page per upstream notebook, each linking the original it mirrors. |
 | **Numerical tests** | Two suites, split by what they are allowed to touch: [`tests/test_generator.py`][ports-tests] guards this repo's own inputs — the vendored pin, the fixture definitions, the provenance stamp; [`tests/test_reference.py`][ref-tests] asserts the port against upstream at rank 2 and rank 3. |
 | **Regenerate the reference bundle** | [Running the tests](#running-the-tests) — the command, the provenance blob, and the platform caveat that matters before you commit one. |
 | **Reproduce on any GPU box** | [`container/README.md`][container] — one pinned container, any GPU box. |

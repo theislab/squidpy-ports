@@ -1,6 +1,6 @@
 # squidpy API equivalence
 
-The public API — `squidpy.experimental.tl.align` and the two `experimental.im` helpers it needs —
+The public API — `squidpy.experimental.tl` and the two `experimental.im` helpers it needs —
 is covered by these notebooks. Upstream's own notebooks call `STalign.LDDMM` and friends directly
 and build their rasters, coordinate axes and initial affines by hand along the way; these are
 sixteen of those seventeen analyses written against the public surface instead, one page per

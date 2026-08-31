@@ -6,7 +6,7 @@ squidpy, and what establishes that the reimplementation is the same algorithm.
 One section per port.
 
 - **[STalign](stalign.md)** — affine + LDDMM alignment, reimplemented in JAX as
-  `squidpy.experimental.tl.align`. The public API is covered by sixteen of upstream's own analyses
+  `squidpy.experimental.tl`. The public API is covered by sixteen of upstream's own analyses
   rewritten against it and executed on a GPU.
 
 Source: [theislab/squidpy-ports](https://github.com/theislab/squidpy-ports).

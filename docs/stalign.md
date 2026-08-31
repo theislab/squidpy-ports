@@ -1,11 +1,11 @@
 # STalign
 
-squidpy's `experimental.tl.align` reimplements
+squidpy's `experimental.tl` reimplements
 [STalign](https://github.com/JEFworks-Lab/STalign)'s affine + LDDMM alignment in JAX. This section
 is the evidence that the port is the same algorithm, in two parts that answer different questions.
 
 - **[squidpy API equivalence](squidpy-api.md)** — the public API,
-  `squidpy.experimental.tl.align`, is covered by sixteen of STalign's seventeen analyses rewritten
+  `squidpy.experimental.tl`, is covered by sixteen of STalign's seventeen analyses rewritten
   against it and executed on a GPU, one page per upstream notebook. These show the results are
   reasonable on real data, through the public surface only.
 
