@@ -21,12 +21,6 @@ source. Where a notebook departs from upstream — a different raster scale, a d
 affine, curves resampled so they can be paired at all — it says so at that point in the notebook
 rather than in a list here.
 
-```{toctree}
-:maxdepth: 1
-
-intentional-divergences
-```
-
 ## A section into a reference volume
 
 ```{toctree}

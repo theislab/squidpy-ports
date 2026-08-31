@@ -8,6 +8,8 @@ is the evidence that the port is the same algorithm, in two parts that answer di
   `squidpy.experimental.tl`, is covered by sixteen of STalign's seventeen analyses rewritten
   against it and executed on a GPU, one page per upstream notebook. These show the results are
   reasonable on real data, through the public surface only.
+- **[Intentional divergences](intentional-divergences.md)** — the one place the port
+  deliberately departs from upstream's algorithm, and the reading behind it.
 
 The numerics are gated separately, by the test suites in this repository rather than by a page:
 [`tests/test_reference.py`](https://github.com/theislab/squidpy-ports/blob/main/tests/test_reference.py)
@@ -25,4 +27,5 @@ Every page names the commit behind its own numbers.
 :maxdepth: 2
 
 squidpy API equivalence <squidpy-api.md>
+Intentional divergences <intentional-divergences.md>
 ```
