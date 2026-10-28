@@ -115,14 +115,10 @@ def solver_keys() -> frozenset[str]:
     from its *public* surface rather than from ``lddmm``'s signature: the TypedDicts are
     exported, so unlike the kernel they carry a stability contract.
     """
-    from squidpy.experimental.tl import (
-        StalignImageSolverKwargs,
-        StalignObsSolverKwargs,
-        StalignVolumeSolverKwargs,
-    )
+    from squidpy.types import StalignImageParams, StalignObsParams, StalignVolumeParams
 
     keys: set[str] = set()
-    for declaration in (StalignImageSolverKwargs, StalignObsSolverKwargs, StalignVolumeSolverKwargs):
+    for declaration in (StalignImageParams, StalignObsParams, StalignVolumeParams):
         keys |= set(declaration.__required_keys__) | set(declaration.__optional_keys__)
     return frozenset(keys)
 

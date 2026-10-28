@@ -1,8 +1,11 @@
-"""Emit the reference bundle consumed by squidpy's STalign tests.
+"""Emit the reference bundle that ``tests/test_reference.py`` compares squidpy against.
 
 Run with::
 
-    hatch run generate:run --out ../squidpy/tests/_data/stalign_reference
+    hatch run generate:run --out tests/data/stalign_reference
+
+Commit what the ``Generate reference bundle`` workflow produces on ubuntu, not a laptop run:
+BLAS/FFT reduction order differs across platforms.
 
 Everything here either calls a public upstream function or observes the unmodified
 ``LDDMM`` loop (see :mod:`.upstream`). The one exception is noted inline: ``LL`` / ``K``
@@ -830,6 +833,7 @@ def main(argv: list[str] | None = None) -> int:
         ("trajectory", _write_trajectory),
         ("image_trajectory", _write_image_trajectory),
         ("image_trajectory_matched", _write_image_trajectory_matched),
+        ("image_mixed_units", _write_image_mixed_units),
         ("slice_trajectory", _write_slice),
     ):
         print(f"generating {step}...", flush=True)

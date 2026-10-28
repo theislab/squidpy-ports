@@ -1,10 +1,10 @@
 name: Generate reference bundle
 
-# Produces the .npz bundle that squidpy commits under tests/_data/stalign_reference/.
+# Produces the .npz bundle committed under tests/data/stalign_reference/.
 #
 # This runs on ubuntu on purpose. Upstream is bit-reproducible on CPU in float64 once
 # thread counts are pinned, but BLAS/FFT reduction order still differs between macOS
-# Accelerate and Linux OpenBLAS. squidpy's scheduled job compares on ubuntu, so the
+# Accelerate and Linux OpenBLAS. The Test workflow compares on ubuntu, so the
 # committed fixtures must be generated there rather than on a developer laptop.
 on:
   workflow_dispatch:

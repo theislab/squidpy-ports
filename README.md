@@ -54,9 +54,10 @@ inputs defined in this repository — no upstream data is copied or redistribute
 | Path | What it is |
 | --- | --- |
 | `vendor/STalign` | Upstream, pinned to one commit. Never edited, never linted, never pip-installed. |
-| `src/squidpy_ports/stalign/fixtures.py` | Input definitions. **Vendored byte-identically into squidpy**; depends on numpy only. |
+| `src/squidpy_ports/stalign/fixtures.py` | Input definitions, shared by the generator and the tests; depends on numpy only. |
 | `src/squidpy_ports/stalign/upstream.py` | Loads upstream by path, asserts the pin, and observes the LDDMM loop. |
 | `src/squidpy_ports/stalign/generate.py` | Writes the `.npz` bundle. |
+| `tests/data/stalign_reference` | The bundle, as generated on ubuntu by the `Generate reference bundle` workflow. |
 
 Upstream is imported by path rather than installed because its `setup.py` reads
 `requirements.txt` verbatim and pins `numpy==1.23.4` / `torch==2.0.0` / `Pillow==9.5.0`,
@@ -68,34 +69,26 @@ observing the unmodified `LDDMM` loop.
 
 ## Running the tests
 
-This repo's own suite guards the generator. It needs nothing but a clone:
-
 ```bash
-pytest
+hatch test
 ```
 
-One test skips without squidpy and JAX installed — deliberately, since this repo does not depend on
-either. Install both and it runs.
+The `test` extra installs squidpy with JAX from the STalign PR branch, and the hatch env sets
+`JAX_ENABLE_X64=1`. `tests/test_reference.py` compares squidpy against upstream's outputs
+committed under `tests/data/stalign_reference/`, so it needs neither torch nor a GPU: about 15 s
+on a laptop. `tests/test_generator.py` guards the generator itself and needs the
+`vendor/STalign` submodule.
 
-`tests/test_reference.py` is the layer that asserts the *port*. It needs squidpy and JAX,
-so it skips without them; install squidpy and it runs. Every upstream value it compares against is
-computed **in this process** from the vendored checkout, by the same generator that writes the
-shareable bundle — so no committed binary can go stale, here or in squidpy. No GPU: float64 on CPU,
-about 80 s on a laptop.
-
-```bash
-uv pip install -e ".[test]" -e /path/to/squidpy"[jax]" pytest
-MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_ENABLE_X64=1 pytest tests/test_reference.py
-```
+To regenerate the bundle, run the `Generate reference bundle` workflow and commit its artifact
+into `tests/data/stalign_reference/`. It runs on ubuntu because BLAS/FFT reduction order differs
+across platforms; locally, `hatch run generate:run --out tests/data/stalign_reference` writes
+the same files. A bundle that no longer matches `fixtures.py` fails
+`test_fixture_definitions_have_not_drifted`.
 
 > **`JAX_ENABLE_X64=1` is not optional.** Upstream is double throughout; without it the port runs in
 > single precision and every tolerance in the suite is meaningless. The suite skips rather than
 > lying if the flag is absent, and it has to come from the environment — `jax.config.update` is
 > process-global and would flip the float32 tests in squidpy's own suite in the same worker.
-
-The `.npz` bundle is still what a *shareable* reference looks like, and
-`python -m squidpy_ports.stalign.generate --out DIR` writes it. Nothing in this repo's tests reads
-it from disk; it exists for anyone who wants the numbers without a torch install.
 
 ## Contact
 

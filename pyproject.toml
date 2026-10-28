@@ -60,6 +60,8 @@ optional-dependencies.test = [
   "coverage>=7.10",
   "pytest",
   "pytest-cov",     # For VS Code’s coverage functionality
+  # The port under test: tracks the open STalign PR (scverse/squidpy#1195) until it merges.
+  "squidpy[jax] @ git+https://github.com/selmanozleyen/squidpy@feat/experimental-fit-core",
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://squidpy-ports.readthedocs.io/"
@@ -85,8 +87,13 @@ python = [ "3.13" ]
 
 [tool.hatch.envs.hatch-test]
 features = [ "dev", "test" ]
+# upstream is float64 throughout; must come from the environment, see test_reference.py
+env-vars.JAX_ENABLE_X64 = "1"
 
-# Emit the reference bundle consumed by squidpy's tests/_data/stalign_reference/.
+[tool.hatch.metadata]
+allow-direct-references = true
+
+# Emit the reference bundle that tests/test_reference.py reads from tests/data/stalign_reference/.
 [tool.hatch.envs.generate]
 installer = "uv"
 scripts.run = "python -m squidpy_ports.stalign.generate {args}"

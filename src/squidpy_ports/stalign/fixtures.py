@@ -1,12 +1,11 @@
-"""Fixture definitions shared by squidpy-ports and squidpy.
+"""Fixture definitions shared by the generator and ``tests/test_reference.py``.
 
-This module is vendored **byte-identically** into squidpy as
-``tests/experimental/methods/_stalign_fixtures.py``. Both sides building their inputs
-from the same source is what stops the committed reference bundle and the tests that
-consume it from drifting apart; a checksum of this file is stamped into every generated
-``.npz`` and asserted on the squidpy side.
+Both sides building their inputs from this one file is what stops the committed reference
+bundle and the tests that consume it from drifting apart; a checksum of this file is
+stamped into every generated ``.npz`` and asserted by the tests.
 
-Consequently it must depend on **numpy only** -- no torch, no jax, no squidpy_ports.
+It depends on **numpy only** -- no torch, no jax -- so the tests can build the same
+inputs without the vendored upstream.
 """
 
 from __future__ import annotations

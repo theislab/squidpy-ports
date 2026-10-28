@@ -1,9 +1,9 @@
 """Numerical comparison of squidpy's STalign port against the pinned original.
 
-Implements scverse/squidpy#1243. Every upstream value here is computed **in this process**
-from the vendored PyTorch STalign, by the same generator that writes the shareable bundle
-(:mod:`squidpy_ports.stalign.generate`) -- so there is no committed binary to go stale, in
-this repo or in squidpy, and the comparison cannot silently drift from the pin.
+Implements scverse/squidpy#1243. Every upstream value here is read from the bundle under
+``tests/data/stalign_reference``, written from the vendored PyTorch STalign by
+:mod:`squidpy_ports.stalign.generate`. Each file carries its provenance, and the checksum
+test below catches a bundle that no longer matches the fixture definitions.
 
 This is the layer that asserts the *port*, so it needs squidpy and JAX; both are optional
 here and the module skips without them. Each xfail's own docstring says what
@@ -59,40 +59,16 @@ from squidpy.experimental.tl._align._stalign_impl import _core, _helpers  # noqa
 
 from squidpy_ports.stalign import fixtures as F  # noqa: E402
 from squidpy_ports.stalign import generate as G  # noqa: E402
-from squidpy_ports.stalign import upstream  # noqa: E402
+
+
+#: Upstream's outputs, committed so this suite needs neither torch nor the vendored checkout.
+#: Regenerate with ``hatch run generate:run --out tests/data/stalign_reference``.
+BUNDLE = Path(__file__).parent / "data" / "stalign_reference"
 
 
 @pytest.fixture(scope="session")
-def bundle(tmp_path_factory) -> Path:
-    """Every upstream value, generated once per session from the vendored checkout.
-
-    Session-scoped because the generator runs the real upstream loops; per-test would pay
-    that repeatedly for identical numbers.
-    """
-    try:
-        st = upstream.load()
-    except FileNotFoundError as exc:  # pragma: no cover - submodule not checked out
-        pytest.skip(str(exc))
-
-    G._pin_determinism()
-    out = tmp_path_factory.mktemp("stalign_reference")
-    clouds = F.make_clouds()
-    for write in (
-        G._write_primitives,
-        G._write_energy,
-        G._write_gradients,
-        G._write_trajectory,
-        G._write_image_trajectory,
-        G._write_image_trajectory_matched,
-        G._write_image_mixed_units,
-        G._write_slice,
-    ):
-        write(st, clouds, out)
-
-    import matplotlib.pyplot as plt
-
-    plt.close("all")  # upstream leaks 4 figures per LDDMM call
-    return out
+def bundle() -> Path:
+    return BUNDLE
 
 
 # Tolerances are calibrated from the measured gaps between the port and upstream,
@@ -103,7 +79,7 @@ EXACT = 1e-12
 
 #: ``lddmm`` carries no defaults of its own -- they live in ``_stalign._SOLVER_DEFAULTS``
 #: so they exist in one place, and the ``fit_stalign_*`` wrappers resolve them. The
-#: reference bundle was generated with these values, and ``_stalign_fixtures.py`` cannot
+#: reference bundle was generated with these values, and ``fixtures.py`` cannot
 #: carry them because it is checksummed against the bundle.
 _SOLVER_TAIL = {"muA": None, "muB": None, "tol": None, "patience": 25}
 
@@ -122,6 +98,16 @@ def _skip_without_x64() -> None:
             "Set JAX_ENABLE_X64=1 in the environment -- not via jax.config.update, which "
             "would corrupt the float32 tests in this directory."
         )
+
+
+#: Upstream's result keys, and the ``lddmm`` / ``StalignFit`` field each one is compared to.
+_FIELDS = {
+    "A": "affine",
+    "v": "velocity",
+    "WM": "match_weights",
+    "WA": "artifact_weights",
+    "WB": "background_weights",
+}
 
 
 def _load(bundle: Path, name: str) -> np.lib.npyio.NpzFile:
@@ -233,13 +219,13 @@ def test_every_fixture_carries_provenance(bundle, name):
 def test_fixture_definitions_have_not_drifted(bundle):
     """The generator and these tests must build inputs from the same file, byte for byte.
 
-    ``_stalign_fixtures.py`` is vendored from squidpy-ports. If someone edits one copy
-    without regenerating, every comparison below silently compares different inputs.
+    If someone edits ``fixtures.py`` without regenerating, every comparison below silently
+    compares different inputs.
     """
     recorded = json.loads(str(_load(bundle, "primitives")["__provenance__"]))["fixtures_checksum"]
     assert F.checksum() == recorded, (
-        "_stalign_fixtures.py differs from the copy the reference bundle was generated "
-        "with. Re-sync it from squidpy-ports and regenerate the bundle."
+        "fixtures.py differs from the copy the reference bundle was generated with. "
+        "Regenerate the bundle."
     )
 
 
@@ -312,14 +298,15 @@ def test_transform_grid_backward_matches_upstream(primitives, source_grid, targe
     """
     axes, _ = target_grid
     query_axes, _ = source_grid
-    result = StalignObsFit(
+    result = StalignImageFit(
         affine=jnp.asarray(primitives["to_A"]),
         velocity=jnp.asarray(primitives["velocity"]),
         velocity_grid=velocity_grid,
+        query_axes=query_axes,
+        ref_axes=axes,
     )
-    # Backward evaluates the *reference* grid in the query frame, so the grid under test
-    # goes in as `ref_axes`; the query side is only there to satisfy the guard.
-    got = result.deformation_grid(direction="backward", query_axes=query_axes, ref_axes=axes)
+    # Backward evaluates the *reference* grid in the query frame.
+    got = result.deformation_grid(direction="backward")
     error = rel(np.moveaxis(np.asarray(got), 0, -1), primitives["grid_backward"])
     record_property("rel_error", error)
     assert error < EXACT
@@ -679,7 +666,7 @@ def test_affine_from_points_is_equivalent_when_well_conditioned(primitives, reco
         blur=F.RASTER_PARAMS["blur"],
         raster_expand=F.RASTER_PARAMS["expand"],
     )
-    affine = np.asarray(fit["affine"])
+    affine = np.asarray(fit.affine)
     linear, translation = affine[:2, :2], affine[:2, 2]
 
     ours = _residual(linear, translation, source, target)
@@ -690,18 +677,17 @@ def test_affine_from_points_is_equivalent_when_well_conditioned(primitives, reco
     assert abs(ours - theirs) / theirs < 1e-2, f"squidpy {ours:.6f} vs upstream {theirs:.6f}"
 
 
-def test_affine_from_points_survives_ill_conditioning(primitives, record_property):
-    """D7, the half that matters: upstream's ``inv(XᵀX)`` collapses, skimage does not."""
-    source, target = primitives["ill_src"], primitives["ill_dst"]
-    linear, translation = _helpers.affine_from_points(jnp.asarray(source), jnp.asarray(target))
+def test_affine_from_points_refuses_ill_conditioning(primitives, record_property):
+    """D7: on near-collinear landmarks upstream's ``inv(XᵀX)`` collapses; squidpy refuses.
 
-    ours = _residual(linear, translation, source, target)
+    The refusal is the fix: no affine fit from points on a line is meaningful, so squidpy
+    raises rather than returning a better-conditioned but still arbitrary answer.
+    """
+    source, target = primitives["ill_src"], primitives["ill_dst"]
     theirs = _residual(primitives["lt_ill_L"], primitives["lt_ill_T"], source, target)
-    record_property("residual_squidpy", ours)
     record_property("residual_upstream", theirs)
-    assert ours < theirs * 1e-6, (
-        f"expected upstream to lose badly on near-collinear landmarks, got squidpy {ours:.3e} vs upstream {theirs:.3e}"
-    )
+    with pytest.raises(ValueError, match="not collinear"):
+        _helpers.affine_from_points(jnp.asarray(source), jnp.asarray(target))
 
 
 # --------------------------------------------------------------------------------------
@@ -747,11 +733,11 @@ def test_trajectory_matches_upstream(bundle, primitives, niter, record_property)
 
     budget = _TRAJECTORY_BUDGET[niter]
     for name, got, expected in (
-        ("A", result["A"], snapshot["A"]),
-        ("v", result["v"], snapshot["v"]),
-        ("WM", result["WM"], snapshot["WM"]),
-        ("WA", result["WA"], snapshot["WA"]),
-        ("WB", result["WB"], snapshot["WB"]),
+        ("A", result["affine"], snapshot["A"]),
+        ("v", result["velocity"], snapshot["v"]),
+        ("WM", result["match_weights"], snapshot["WM"]),
+        ("WA", result["artifact_weights"], snapshot["WA"]),
+        ("WB", result["background_weights"], snapshot["WB"]),
     ):
         error = rel(got, expected)
         record_property(f"rel_error_{name}", error)
@@ -824,7 +810,7 @@ def test_replay_image_call_reproduces_upstream(image_reference, record_property)
     not (a known divergence).
     """
     fit = _harness_shaped_fit(image_reference)
-    error = rel(fit["affine"], image_reference["A"])
+    error = rel(fit.affine, image_reference["A"])
     record_property("rel_error", error)
     assert error < 1e-10, f"the replay's own call disagrees with upstream by {error:.3e}"
 
@@ -837,7 +823,7 @@ def test_replay_image_call_is_role_sensitive(image_reference):
     and absorbed into a tolerance.
     """
     swapped = _harness_shaped_fit(image_reference, swap_roles=True)
-    assert rel(swapped["affine"], image_reference["A"]) > 1e-3
+    assert rel(swapped.affine, image_reference["A"]) > 1e-3
 
 
 @pytest.fixture(scope="session")
@@ -876,7 +862,7 @@ def test_mixed_unit_velocity_grid_matches_upstream(image_mixed_units, record_pro
     that rules the general case out -- see D12 for what remains open.
     """
     fit = _fit_mixed_units(image_mixed_units, _IMAGE_ITERS)
-    got = tuple(int(np.asarray(axis).size) for axis in fit["velocity_grid"])
+    got = tuple(int(np.asarray(axis).size) for axis in fit.velocity_grid)
     expected = (int(image_mixed_units["xv_0"].size), int(image_mixed_units["xv_1"].size))
     record_property("velocity_grid_squidpy", got)
     record_property("velocity_grid_upstream", expected)
@@ -904,10 +890,10 @@ def test_image_path_axes_match_the_reference(image_reference):
     fit = fit_stalign_image(image_reference["ref"], image_reference["query"], niter=0, **_IMAGE_PARAMS)
 
     for got, expected in (
-        (fit["query_axes"][0], image_reference["source_axis_0"]),
-        (fit["query_axes"][1], image_reference["source_axis_1"]),
-        (fit["ref_axes"][0], image_reference["target_axis_0"]),
-        (fit["ref_axes"][1], image_reference["target_axis_1"]),
+        (fit.query_axes[0], image_reference["source_axis_0"]),
+        (fit.query_axes[1], image_reference["source_axis_1"]),
+        (fit.ref_axes[0], image_reference["target_axis_0"]),
+        (fit.ref_axes[1], image_reference["target_axis_1"]),
     ):
         np.testing.assert_allclose(np.asarray(got), expected, rtol=0, atol=1e-12)
 
@@ -938,7 +924,7 @@ def test_image_path_matches_upstream(image_reference, name, record_property):
     values and on gradients.
     """
     result = _run_image(image_reference)
-    error = rel(result[name], image_reference[name])
+    error = rel(result[_FIELDS[name]], image_reference[name])
     record_property("rel_error", error)
     assert error < 1e-10, f"{name}: {error:.3e}"
 
@@ -965,9 +951,9 @@ def test_image_warp_matches_upstream(image_reference, record_property):
     """
     result = _run_image(image_reference)
     fit = StalignImageFit(
-        affine=result["A"],
-        velocity=result["v"],
-        velocity_grid=result["xv"],
+        affine=result["affine"],
+        velocity=result["velocity"],
+        velocity_grid=result["velocity_grid"],
         query_axes=(jnp.asarray(image_reference["source_axis_0"]), jnp.asarray(image_reference["source_axis_1"])),
         ref_axes=(jnp.asarray(image_reference["target_axis_0"]), jnp.asarray(image_reference["target_axis_1"])),
     )
@@ -998,7 +984,7 @@ def test_on_grid_sampling_costs_six_orders_of_magnitude(bundle, record_property)
         **_IMAGE_PARAMS,
         **_SOLVER_TAIL,
     )
-    degraded = rel(result["v"], matched["v"])
+    degraded = rel(result["velocity"], matched["v"])
     record_property("rel_error_on_grid", degraded)
     assert 1e-6 < degraded < 1e-1, (
         f"on-grid sampling now costs {degraded:.3e}; if this has become exact, D10 is gone "
@@ -1049,9 +1035,9 @@ def test_converged_solution_matches_upstream(bundle, primitives, record_property
     assert after < before / 5.0, f"reference barely moved: TRE {before:.2f} -> {after:.2f}"
 
     converged = StalignObsFit(
-        affine=result["A"],
-        velocity=result["v"],
-        velocity_grid=result["xv"],
+        affine=result["affine"],
+        velocity=result["velocity"],
+        velocity_grid=result["velocity_grid"],
         aligned_points=jnp.zeros((0, 2)),
     )
     aligned = _transform_rc(converged, np.asarray(primitives["query"])[:, ::-1])
@@ -1144,18 +1130,16 @@ def test_slice_regularizer_matches_upstream(slice_reference, record_property):
         assert error < EXACT, name
 
 
-@pytest.mark.parametrize(("order", "key"), [(1, "interp_border"), (0, "interp_nearest")])
-def test_slice_interp_matches_upstream(slice_reference, slice_axes, order, key, record_property):
-    """``_interp`` at rank 3 vs ``STalign.interp3D``, linear and nearest.
+def test_slice_interp_matches_upstream(slice_reference, slice_axes, record_property):
+    """``interp`` at rank 3 vs ``STalign.interp3D``.
 
-    ``order=0`` is not decoration: reading integer structure ids off an annotation volume
-    is the entire point of the recipe, and interpolating them linearly would average two
-    ids into a third, unrelated one.
+    Linear only: the solver never samples nearest. Nearest, which reading integer structure
+    ids off an annotation volume needs, is ``sample_volume(order=0)``'s and is tested there.
     """
     reference, _ = slice_axes
     grid = jnp.asarray(np.moveaxis(np.asarray(slice_reference["grid_backward"]), -1, 0))
-    got = _core.interp(reference, jnp.asarray(slice_reference["ref"]), grid, order=order)
-    error = rel(got, slice_reference[key])
+    got = _core.interp(reference, jnp.asarray(slice_reference["ref"]), grid)
+    error = rel(got, slice_reference["interp_border"])
     record_property("rel_error", error)
     assert error < EXACT
 
@@ -1219,7 +1203,7 @@ def test_slice_path_matches_upstream(slice_reference, name, record_property):
     was generalised rather than rewritten.
     """
     result = _run_slice(slice_reference)
-    error = rel(result[name], slice_reference[name])
+    error = rel(result[_FIELDS[name]], slice_reference[name])
     record_property("rel_error", error)
     assert error < 1e-10, f"{name}: {error:.3e}"
 
@@ -1315,7 +1299,7 @@ def test_slice_sample_volume_matches_upstream(slice_reference, slice_axes, order
     reference, _ = slice_axes
     # `sample_volume` takes points in `(x, y, z)`, the reverse of `axes` in `(z, y, x)`.
     grid = np.asarray(slice_reference["grid_backward"])[0].reshape(-1, 3)[:, ::-1]
-    got = sample_volume(jnp.asarray(slice_reference["ref"]), reference, grid, order=order)
+    got = sample_volume(jnp.asarray(slice_reference["ref"]), grid, axes=reference, order=order)
     expected = np.asarray(slice_reference[key]).reshape(2, -1)
     error = rel(got, expected)
     record_property("rel_error", error)
@@ -1391,7 +1375,7 @@ def test_slice_fit_reaches_the_same_place_as_the_solver(slice_reference, record_
         **_SLICE_PARAMS,
         **{key: value for key, value in _SOLVER_TAIL.items() if key != "sigmaP"},
     )
-    error = rel(fit["affine"], slice_reference["A"])
+    error = rel(fit.affine, slice_reference["A"])
     record_property("rel_error_A", error)
     assert error < 1e-10
 
@@ -1419,7 +1403,7 @@ def _harness_shaped_volume_fit(fixture, niter=_SLICE_ITERS):
 
     reference_axes = [np.asarray(fixture[f"ref_axis_{axis}"]) for axis in range(3)]
     section_axes = [np.asarray(fixture[f"query_axis_{axis}"]) for axis in range(2)]
-    forwarded = {"niter": niter, "diffeo_start": niter + 1, "sigmaP": 2e1, **_SLICE_PARAMS}
+    forwarded = {"niter": niter, "diffeo_start": niter + 1, **_SLICE_PARAMS}
     return stalign_align_volume(
         as_sdata(_channels_first(fixture["ref"], ndim=3), reference_axes),
         as_sdata(_channels_first(fixture["query"], ndim=2), section_axes),
@@ -1443,10 +1427,10 @@ def test_replay_volume_call_resolves_the_axes_it_was_given(slice_reference):
 
     for axis in range(3):
         expected = np.asarray(slice_reference[f"ref_axis_{axis}"])
-        np.testing.assert_allclose(np.asarray(fit["ref_axes"][axis]), expected, rtol=0, atol=1e-9)
+        np.testing.assert_allclose(np.asarray(fit.ref_axes[axis]), expected, rtol=0, atol=1e-9)
     for axis in range(2):
         expected = np.asarray(slice_reference[f"query_axis_{axis}"])
-        np.testing.assert_allclose(np.asarray(fit["query_axes"][axis]), expected, rtol=0, atol=1e-9)
+        np.testing.assert_allclose(np.asarray(fit.query_axes[axis]), expected, rtol=0, atol=1e-9)
 
 
 def test_replay_volume_call_reproduces_upstream(slice_reference, record_property):
@@ -1463,6 +1447,6 @@ def test_replay_volume_call_reproduces_upstream(slice_reference, record_property
     carry is a mis-ordered affine or a lossy placement, which is what this measures.
     """
     fit = _harness_shaped_volume_fit(slice_reference)
-    error = rel(fit["affine"], slice_reference["A"])
+    error = rel(fit.affine, slice_reference["A"])
     record_property("rel_error", error)
     assert error < 1e-10, f"the replay's own rank-3 call disagrees with upstream by {error:.3e}"
