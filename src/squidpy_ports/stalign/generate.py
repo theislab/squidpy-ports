@@ -6,7 +6,7 @@ Run with::
 
 One zipped zarr store: a group per section, its provenance in the group's attributes, and
 the fixture parameters in the root's. squidpy's tests download the copy the
-``Generate reference bundle`` workflow publishes from ubuntu, not a laptop run: BLAS/FFT
+``Generate reference bundle`` workflow builds on ubuntu, not a laptop run: BLAS/FFT
 reduction order differs across platforms.
 
 Everything here either calls a public upstream function or observes the unmodified
@@ -825,13 +825,15 @@ def _pack(npz_dir: Path, out: Path) -> None:
     out.unlink(missing_ok=True)
     with ZipStore(out, mode="w") as store:
         root = zarr.open_group(store, mode="w")
-        root.attrs.update({
-            "fixtures_checksum": F.checksum(),
-            "SEED": F.SEED,
-            "RASTER_PARAMS": F.RASTER_PARAMS,
-            "LDDMM_PARAMS": F.LDDMM_PARAMS,
-            "MIXED_TARGET_STEP": MIXED_TARGET_STEP,
-        })
+        root.attrs.update(
+            {
+                "fixtures_checksum": F.checksum(),
+                "SEED": F.SEED,
+                "RASTER_PARAMS": F.RASTER_PARAMS,
+                "LDDMM_PARAMS": F.LDDMM_PARAMS,
+                "MIXED_TARGET_STEP": MIXED_TARGET_STEP,
+            }
+        )
         for path in sorted(npz_dir.glob("*.npz")):
             data = np.load(path)
             group = root.create_group(path.stem)
