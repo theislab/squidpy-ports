@@ -1,11 +1,13 @@
-"""Emit the reference bundle that ``tests/test_reference.py`` compares squidpy against.
+"""Emit the reference bundle squidpy's STalign reference tests compare against.
 
 Run with::
 
-    hatch run generate:run --out tests/data/stalign_reference
+    hatch run generate:run --out stalign_reference.zarr.zip
 
-Commit what the ``Generate reference bundle`` workflow produces on ubuntu, not a laptop run:
-BLAS/FFT reduction order differs across platforms.
+One zipped zarr store: a group per section, its provenance in the group's attributes, and
+the fixture parameters in the root's. squidpy's tests download the copy the
+``Generate reference bundle`` workflow publishes from ubuntu, not a laptop run: BLAS/FFT
+reduction order differs across platforms.
 
 Everything here either calls a public upstream function or observes the unmodified
 ``LDDMM`` loop (see :mod:`.upstream`). The one exception is noted inline: ``LL`` / ``K``
@@ -815,34 +817,62 @@ def _smooth_velocity_3d(xv, nt: int) -> np.ndarray:
     return field / (xv[0].size * xv[1].size * xv[2].size)
 
 
+def _pack(npz_dir: Path, out: Path) -> None:
+    """Write every ``.npz`` in ``npz_dir`` into one zipped zarr store at ``out``."""
+    import zarr
+    from zarr.storage import ZipStore
+
+    out.unlink(missing_ok=True)
+    with ZipStore(out, mode="w") as store:
+        root = zarr.open_group(store, mode="w")
+        root.attrs.update({
+            "fixtures_checksum": F.checksum(),
+            "SEED": F.SEED,
+            "RASTER_PARAMS": F.RASTER_PARAMS,
+            "LDDMM_PARAMS": F.LDDMM_PARAMS,
+            "MIXED_TARGET_STEP": MIXED_TARGET_STEP,
+        })
+        for path in sorted(npz_dir.glob("*.npz")):
+            data = np.load(path)
+            group = root.create_group(path.stem)
+            group.attrs["provenance"] = json.loads(str(data["__provenance__"]))
+            for key in data.files:
+                if key != "__provenance__":
+                    group.create_array(key, data=data[key])
+
+
 def main(argv: list[str] | None = None) -> int:
     """Generate the whole bundle."""
+    import tempfile
+
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, required=True, help="directory to write the .npz bundle into")
+    parser.add_argument("--out", type=Path, required=True, help="the .zarr.zip store to write")
     args = parser.parse_args(argv)
 
     _pin_determinism()
     st = upstream.load()
     clouds = F.make_clouds()
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    for step, fn in (
-        ("primitives", _write_primitives),
-        ("energy", _write_energy),
-        ("gradients", _write_gradients),
-        ("trajectory", _write_trajectory),
-        ("image_trajectory", _write_image_trajectory),
-        ("image_trajectory_matched", _write_image_trajectory_matched),
-        ("image_mixed_units", _write_image_mixed_units),
-        ("slice_trajectory", _write_slice),
-    ):
-        print(f"generating {step}...", flush=True)
-        fn(st, clouds, args.out)
+    with tempfile.TemporaryDirectory() as tmp:
+        npz_dir = Path(tmp)
+        for step, fn in (
+            ("primitives", _write_primitives),
+            ("energy", _write_energy),
+            ("gradients", _write_gradients),
+            ("trajectory", _write_trajectory),
+            ("image_trajectory", _write_image_trajectory),
+            ("image_trajectory_matched", _write_image_trajectory_matched),
+            ("image_mixed_units", _write_image_mixed_units),
+            ("slice_trajectory", _write_slice),
+        ):
+            print(f"generating {step}...", flush=True)
+            fn(st, clouds, npz_dir)
 
-    import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt
 
-    plt.close("all")  # upstream leaks 4 figures per LDDMM call
-    print(f"wrote {len(list(args.out.glob('*.npz')))} files to {args.out}")
+        plt.close("all")  # upstream leaks 4 figures per LDDMM call
+        _pack(npz_dir, args.out)
+    print(f"wrote {args.out}")
     return 0
 
 

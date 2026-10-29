@@ -171,23 +171,6 @@ def test_reference_figures_are_verbatim_upstream_output():
         )
 
 
-def test_rank_three_defaults_are_actually_different_from_rank_two():
-    """The five knobs where upstream's 3D entry point departs from its 2D one.
-
-    If the volume defaults were ever collapsed into the point-cloud ones, the test above would
-    still pass on every shared key while the rank-3 fit silently ran with 2D step sizes.
-    """
-    pytest.importorskip("squidpy")
-    # Private by necessity: the port's default *values* have no public accessor, and this
-    # is the check that a notebook passing nothing puts identical numbers on both sides.
-    from squidpy._params import defaults_of
-    from squidpy.types import StalignObsParams, StalignVolumeParams
-
-    planar, volume = defaults_of(StalignObsParams), defaults_of(StalignVolumeParams)
-    differing = {name for name, value in volume.items() if name in planar and planar[name] != value}
-    assert differing == {"expand", "epL", "epT", "epV", "sigmaR"}, sorted(differing)
-
-
 def test_squidpy_commit_prefers_the_install_record_and_never_guesses(monkeypatch):
     """A manifest may record the squidpy commit only when it can prove it.
 

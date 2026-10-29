@@ -1,11 +1,7 @@
-"""Fixture definitions shared by the generator and ``tests/test_reference.py``.
+"""Fixture definitions the reference bundle is generated from.
 
-Both sides building their inputs from this one file is what stops the committed reference
-bundle and the tests that consume it from drifting apart; a checksum of this file is
-stamped into every generated ``.npz`` and asserted by the tests.
-
-It depends on **numpy only** -- no torch, no jax -- so the tests can build the same
-inputs without the vendored upstream.
+Its checksum and parameters are stamped into the bundle, so squidpy's tests read the inputs
+from the bundle rather than from this file. It depends on **numpy only**.
 """
 
 from __future__ import annotations

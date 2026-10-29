@@ -7,4 +7,4 @@ descends smooths all three ([`:1527`](https://github.com/JEFworks-Lab/STalign/bl
 the new axis. squidpy transforms all three, which moves the fitted velocity field by 31x and is
 why `sigmaR` is retuned from upstream's `1e8` to `1e6`. Unverified against the paper
 ([Clifton et al. 2023](https://doi.org/10.1038/s41467-023-43915-7)), and pinned by a strict xfail
-in `tests/test_reference.py` rather than asserted away.
+in squidpy's `test_stalign_reference.py` rather than asserted away.
