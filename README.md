@@ -67,9 +67,10 @@ observing the unmodified `LDDMM` loop.
 ## Running the tests
 
 ```bash
-hatch test
+uv sync --frozen --extra test && uv run pytest
 ```
 
+The same commands CI runs, from `uv.lock`: the environment the bundle is generated in.
 `tests/test_generator.py` guards the generator and needs the `vendor/STalign` submodule.
 
 ## Publishing the reference bundle

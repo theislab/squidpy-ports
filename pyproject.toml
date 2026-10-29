@@ -77,15 +77,6 @@ scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
 scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 scripts.clean = "git clean -fdX -- {args:docs}"
 
-# A single cell on purpose. This repo only ever runs a vendored torch model to emit
-# fixtures; fanning that across Pythons costs CI minutes and buys nothing, and
-# cross-platform BLAS/FFT reduction order would change the numbers we are pinning.
-[[tool.hatch.envs.hatch-test.matrix]]
-deps = [ "stable" ]
-python = [ "3.13" ]
-
-[tool.hatch.envs.hatch-test]
-features = [ "dev", "test" ]
 # Emit the reference bundle squidpy's STalign reference tests download (stalign_reference.zarr.zip).
 [tool.hatch.envs.generate]
 installer = "uv"
@@ -97,13 +88,6 @@ scripts.run = "python -m squidpy_ports.stalign.generate {args}"
 MKL_NUM_THREADS = "1"
 MPLBACKEND = "agg"
 OMP_NUM_THREADS = "1"
-
-[tool.hatch.envs.hatch-test.overrides]
-# If the matrix variable `deps` is set to "pre",
-# set the environment variable `UV_PRERELEASE` to "allow".
-matrix.deps.env-vars = [
-  { key = "UV_PRERELEASE", value = "allow", if = [ "pre" ] },
-]
 
 [tool.ruff]
 line-length = 120
