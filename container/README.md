@@ -2,7 +2,7 @@
 
 The executed notebooks are produced by **one container**, from **pinned, public sources** —
 no sibling checkout, no environment tricks. It bundles this repository, the
-pinned squidpy JAX port (`selmanozleyen/squidpy@7ff381e`), the pinned upstream STalign
+pinned squidpy JAX port (`selmanozleyen/squidpy@aa2b414`), the pinned upstream STalign
 submodule (`b2068ed`) with its datasets, and the notebooks themselves. Anyone with a GPU box
 and Apptainer can rebuild any result.
 
@@ -30,7 +30,7 @@ apptainer run --nv --writable-tmpfs --bind ./out:/output \
 - `--nv` exposes the host GPU; `--writable-tmpfs` gives the run a scratch overlay; `--bind`
   chooses where results land.
 - Notebooks: any file in [`docs/notebooks/squidpy-api/`][api]. The two `*-allen3Datlas` ones
-  additionally download the Allen atlas at run time; the rest read only vendored data.
+  also read the Allen atlas, which the image fetches at build time, so runs stay offline.
 
 [api]: https://github.com/theislab/squidpy-ports/tree/main/docs/notebooks/squidpy-api
 
@@ -48,7 +48,7 @@ carries the figures it produced. The squidpy commit is the one pinned in this co
 | Component | Pin | Source |
 |---|---|---|
 | Upstream STalign | `b2068edc98974efa54537eca194736e177bbe11d` | submodule, baked in |
-| squidpy JAX port | `selmanozleyen/squidpy@7ff381e` (`feat/experimental-fit-core`) | installed from git at build |
+| squidpy JAX port | `selmanozleyen/squidpy@aa2b414` (`feat/experimental-fit-core`) | installed from git at build |
 | squidpy-ports | this checkout | `%files` at build |
 
 ## CPU-only

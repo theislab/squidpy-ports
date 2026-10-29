@@ -115,7 +115,7 @@ setup_start=$SECONDS
 # instead of in the lock: squidpy is a git checkout at a rev, not a released version.
 uv sync --frozen --project "$PORTS" --no-dev
 uv pip install --python "$UV_PROJECT_ENVIRONMENT/bin/python" \
-    "$SQUIDPY[jax]" "jax[cuda12]" nbclient ipykernel
+    "$SQUIDPY[jax]" "jax[cuda12]==0.12.0.1" nbclient ipykernel
 PY="$UV_PROJECT_ENVIRONMENT/bin/python"
 echo "### setup took $((SECONDS - setup_start))s"
 

@@ -11,12 +11,11 @@ here, kept out of the reproduction contract on purpose.
 # Build the image (CPU node; everything churny on /localscratch, final .sif copied to Lustre)
 sbatch --export=NIL .claude/build_container.sbatch
 
-# Run one comparison notebook (GPU); thin launcher, just `apptainer run`
+# Run one notebook (GPU); thin launcher, just `apptainer run`
 sbatch --export=NIL cluster/run_container.sbatch <stalign.sif> <notebook.ipynb> <out-dir>
 ```
 
-Notebooks: `stalign-xenium-comparison.ipynb`, `stalign-merfish-comparison.ipynb`,
-`stalign-visium-affine-comparison.ipynb`.
+Notebooks: any of `docs/notebooks/squidpy-api/*.ipynb`, e.g. `merfish-merfish.ipynb`.
 
 ## Learnings (each cost real time)
 

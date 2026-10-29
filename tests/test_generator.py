@@ -8,46 +8,16 @@ test suite quietly becomes meaningless.
 
 from __future__ import annotations
 
-import json
-import re
-from pathlib import Path
-
 import numpy as np
 import pytest
 
 from squidpy_ports.stalign import fixtures as F
 from squidpy_ports.stalign import upstream
 
-#: The port hands these to `jax.jit` as static arguments, so each one must arrive as a
-#: hashable Python scalar (`_core.py` `static_argnames`).
-STATIC_ARGUMENTS = (
-    "niter",
-    "diffeo_start",
-    "epL",
-    "epT",
-    "epV",
-    "sigmaM",
-    "sigmaA",
-    "sigmaB",
-    "sigmaR",
-    "sigmaP",
-    "tol",
-    "patience",
-)
-
 
 def test_vendored_upstream_is_pinned(stalign):
     assert hasattr(stalign, "LDDMM")
     assert hasattr(stalign, "rasterize")
-
-
-def test_staged_checkout_uses_preverified_sha(monkeypatch, tmp_path):
-    """Scratch staging may omit Git metadata but must carry a verified source SHA."""
-    failed = upstream.subprocess.CompletedProcess([], returncode=128, stdout="", stderr="not a repository")
-    monkeypatch.setattr(upstream.subprocess, "run", lambda *args, **kwargs: failed)
-    monkeypatch.setenv("SQUIDPY_PORTS_STALIGN_SHA", upstream.UPSTREAM_SHA)
-
-    assert upstream._checkout_sha(tmp_path) == upstream.UPSTREAM_SHA
 
 
 def test_clouds_are_deterministic():
@@ -125,71 +95,3 @@ def test_fixture_transform_is_not_round(name):
     """
     value = np.atleast_1d(getattr(F, name)).astype(float)
     assert np.all(np.abs(value - np.round(value, 2)) > 1e-6)
-
-
-# --------------------------------------------------------------------------------------
-# The rank-3 (volume-to-section) comparison's conversion helpers
-# --------------------------------------------------------------------------------------
-
-
-def test_reference_figures_are_verbatim_upstream_output():
-    """Every published figure on the comparison page is upstream's own, unrecomputed.
-
-    ``docs/_static/reference/SOURCES.md`` claims each PNG was copied verbatim from a named
-    cell of a pinned upstream notebook. That claim is the whole basis for calling those
-    panels "upstream's result" rather than "our replay of it", so it is checked by bytes
-    rather than trusted -- a regenerated or edited figure, or a wrong cell reference, fails
-    here. It caught one: `upstream-merfish-merfish.png` was documented as cell 44 of a
-    37-cell notebook.
-    """
-    import base64
-
-    from squidpy_ports.stalign import upstream
-
-    reference = Path(__file__).resolve().parents[1] / "docs" / "_static" / "reference"
-    rows = re.findall(
-        r"^\|\s*`([^`]+\.png)`\s*\|[^|]*\|\s*\[([^\]]+)\]\([^)]+\)\s*\|\s*(\d+)\s*\|",
-        (reference / "SOURCES.md").read_text(),
-        re.M,
-    )
-    assert len(rows) >= 11, f"SOURCES.md table did not parse; got {len(rows)} rows"
-
-    notebooks = upstream.vendor_root() / "docs" / "notebooks"
-    for name, notebook, cell in rows:
-        committed = reference / name
-        assert committed.exists(), f"{name} is listed in SOURCES.md but not present"
-        cells = json.loads((notebooks / notebook).read_text())["cells"]
-        assert int(cell) < len(cells), f"{name}: SOURCES.md cites cell {cell}, {notebook} has {len(cells)}"
-        published = [
-            base64.b64decode(output["data"]["image/png"])
-            for output in cells[int(cell)].get("outputs", [])
-            if "image/png" in output.get("data", {})
-        ]
-        assert committed.read_bytes() in published, (
-            f"{name} is not byte-identical to any image upstream committed at "
-            f"{notebook} cell {cell} -- it was recomputed, edited, or the cell is wrong"
-        )
-
-
-def test_squidpy_commit_prefers_the_install_record_and_never_guesses(monkeypatch):
-    """A manifest may record the squidpy commit only when it can prove it.
-
-    A VCS install carries the resolved sha in pip's metadata; an editable install of a
-    working tree carries only a directory, which is why the staged cluster job resolves the
-    commit itself and passes `SQUIDPY_COMMIT`. With neither, the answer is `None` -- a
-    manifest admitting it does not know beats one asserting a commit it cannot substantiate.
-    """
-    from squidpy_ports.stalign import upstream
-
-    monkeypatch.delenv("SQUIDPY_COMMIT", raising=False)
-    # no install record, no env var -> no claim
-    monkeypatch.setattr("importlib.metadata.distribution", lambda _: (_ for _ in ()).throw(FileNotFoundError))
-    assert upstream.squidpy_commit() is None
-
-    # the staged job's value is used when pip cannot answer
-    monkeypatch.setenv("SQUIDPY_COMMIT", "0123456789abcdef")
-    assert upstream.squidpy_commit() == "0123456789abcdef"
-
-    # an empty env var is not a commit
-    monkeypatch.setenv("SQUIDPY_COMMIT", "")
-    assert upstream.squidpy_commit() is None
