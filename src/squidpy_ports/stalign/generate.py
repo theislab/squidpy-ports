@@ -438,10 +438,23 @@ def _write_trajectory(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
         out[name] = payload
 
 
-#: Solver settings for the image path. `fit_stalign_image` works in pixel units, so the
-#: kernel width and velocity step are far smaller than the micron-scale point-cloud
-#: defaults; these are the values the squidpy side passes too.
-IMAGE_PARAMS = {"a": 8.0, "p": 2.0, "expand": 2.0, "nt": 2, "diffeo_start": 4, "epV": 1.0}
+#: Solver settings for the image path, every one spelled out (the trailing six are upstream's
+#: own `LDDMM` defaults). Pixel units, so the kernel width and velocity step are far smaller
+#: than the micron-scale point-cloud defaults. Stored in the bundle for squidpy to reuse.
+IMAGE_PARAMS = {
+    "a": 8.0,
+    "p": 2.0,
+    "expand": 2.0,
+    "nt": 2,
+    "diffeo_start": 4,
+    "epV": 1.0,
+    "epL": 2e-8,
+    "epT": 2e-1,
+    "sigmaM": 1.0,
+    "sigmaB": 2.0,
+    "sigmaA": 5.0,
+    "sigmaR": 5e5,
+}
 IMAGE_ITERS = 12
 
 #: Initial affine for the image comparisons. Deliberately *not* identity, and not a round
@@ -631,6 +644,9 @@ SLICE_PARAMS = {
     "epL": 1e-9,
     "epT": 1e-2,
     "epV": 1.0,
+    "sigmaM": 1.0,
+    "sigmaB": 2.0,
+    "sigmaA": 5.0,
     "sigmaR": 1e8,
 }
 SLICE_ITERS = 12
@@ -818,11 +834,10 @@ def _smooth_velocity_3d(xv, nt: int) -> np.ndarray:
 
 def _write_bundle(sections: dict[str, dict], out: Path) -> None:
     """Write every section into ``uns`` of one AnnData, stored as a zipped zarr store at ``out``."""
-    import pathlib
-    import tempfile
     import zipfile
 
     import anndata as ad
+    from zarr.storage import MemoryStore
 
     def arrays(section: dict) -> dict:
         return {key: value if key == "provenance" else np.asarray(value) for key, value in section.items()}
@@ -833,17 +848,23 @@ def _write_bundle(sections: dict[str, dict], out: Path) -> None:
         "RASTER_PARAMS": {key: np.asarray(value) for key, value in F.RASTER_PARAMS.items()},
         "LDDMM_PARAMS": F.LDDMM_PARAMS,
         "MIXED_TARGET_STEP": MIXED_TARGET_STEP,
+        "TRAJECTORY_ITERS": np.asarray(TRAJECTORY_ITERS),
+        "CONVERGED_ITERS": CONVERGED_ITERS,
+        "IMAGE_PARAMS": IMAGE_PARAMS,
+        "IMAGE_ITERS": IMAGE_ITERS,
+        "SLICE_PARAMS": SLICE_PARAMS,
+        "SLICE_ITERS": SLICE_ITERS,
     }
     adata = ad.AnnData(uns={"fixtures": fixtures, **{name: arrays(section) for name, section in sections.items()}})
-    # written to a directory and zipped once: anndata rewrites zarr.json while writing, which
-    # a ZipStore can only append, leaving duplicate members
-    with tempfile.TemporaryDirectory() as tmp:
-        adata.write_zarr(tmp)
-        out.unlink(missing_ok=True)
-        with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-            for path in sorted(pathlib.Path(tmp).rglob("*")):
-                if path.is_file():
-                    zf.write(path, path.relative_to(tmp).as_posix())
+    # written in memory and zipped once: anndata rewrites zarr.json while writing, which a
+    # ZipStore can only append (duplicate members), and a directory on a case-insensitive
+    # filesystem merges keys such as `A` and `a`
+    store: dict = {}
+    adata.write_zarr(MemoryStore(store_dict=store))
+    out.unlink(missing_ok=True)
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for key in sorted(store):
+            zf.writestr(key, store[key].to_bytes())
 
 
 def main(argv: list[str] | None = None) -> int:
