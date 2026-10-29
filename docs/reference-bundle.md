@@ -29,9 +29,10 @@ redistributed.
 
 ## What it holds
 
-It is an empty AnnData whose `uns` holds everything. `uns["fixtures"]` has the fixture parameters
-the tests reuse (`SEED`, `RASTER_PARAMS`, `LDDMM_PARAMS`, `MIXED_TARGET_STEP`) and the checksum
-of `fixtures.py`. Every other `uns` entry is one section, a dict of arrays, and carries a
+It is an empty AnnData whose `uns` holds everything. `uns["fixtures"]` has every parameter the
+sections were generated with (`SEED`, `RASTER_PARAMS`, `LDDMM_PARAMS`, `IMAGE_PARAMS`,
+`SLICE_PARAMS`, the iteration counts, `MIXED_TARGET_STEP`) and the checksum of `fixtures.py`, so
+squidpy's tests read them rather than keep their own copy. Every other `uns` entry is one section, a dict of arrays, and carries a
 `provenance` entry: upstream commit, squidpy-ports commit, torch / numpy / Python versions,
 platform and timestamp.
 
@@ -49,7 +50,7 @@ platform and timestamp.
 
 ## Regenerating
 
-Regenerate when the upstream pin or `fixtures.py` changes. Run the `Generate reference bundle`
+Regenerate when the upstream pin, `fixtures.py` or the solver settings in `generate.py` change. Run the `Generate reference bundle`
 workflow and publish its artifact as a new release:
 
 ```bash
