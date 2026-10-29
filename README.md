@@ -74,8 +74,9 @@ hatch test
 
 ## Publishing the reference bundle
 
-The `Generate reference bundle` workflow writes `stalign_reference.zarr.zip` (one zarr group per
-section, its provenance in the group's attributes, the fixture parameters in the root's), checks
+The `Generate reference bundle` workflow writes `stalign_reference.zarr.zip`, an AnnData written to a zipped zarr store (each
+section a dict of arrays in `uns`, with its provenance; the fixture parameters in
+`uns["fixtures"]`), checks
 that a second run is bit-identical, and uploads it as a run artifact. Publish it by hand:
 
 ```bash

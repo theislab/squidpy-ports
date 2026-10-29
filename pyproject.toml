@@ -26,6 +26,7 @@ classifiers = [
 # supplies the reproducibility instead, and the resolved versions are recorded in the
 # provenance stamped into every section of the reference bundle.
 dependencies = [
+  "anndata>=0.12",
   # STalign.py imports all of these unconditionally at module level.
   "matplotlib",
   "numpy",
@@ -43,7 +44,6 @@ dependencies = [
 ]
 optional-dependencies.dev = [
   "pre-commit",
-  "twine>=4.0.2",
 ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
@@ -63,7 +63,7 @@ optional-dependencies.test = [
   "pytest-cov",     # For VS Code’s coverage functionality
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
-urls.Documentation = "https://squidpy-ports.readthedocs.io/"
+urls.Documentation = "https://theislab.github.io/squidpy-ports/"
 urls.Homepage = "https://github.com/theislab/squidpy-ports"
 urls.Source = "https://github.com/theislab/squidpy-ports"
 

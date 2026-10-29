@@ -4,8 +4,8 @@ Run with::
 
     hatch run generate:run --out stalign_reference.zarr.zip
 
-One zipped zarr store: a group per section, its provenance in the group's attributes, and
-the fixture parameters in the root's. squidpy's tests download the copy the
+One AnnData in a zipped zarr store: each section a dict of arrays in ``uns``, with its
+provenance, and the fixture parameters in ``uns["fixtures"]``. squidpy's tests download the copy the
 ``Generate reference bundle`` workflow builds on ubuntu, not a laptop run: BLAS/FFT
 reduction order differs across platforms.
 
@@ -18,7 +18,6 @@ quoted verbatim with line references.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import platform
 import subprocess
@@ -58,7 +57,7 @@ def _pin_determinism() -> None:
     warnings.simplefilter("ignore")
 
 
-def _provenance(**extra: Any) -> np.ndarray:
+def _provenance(**extra: Any) -> dict[str, Any]:
     """The provenance stamped into every section, so the outputs stay falsifiable."""
     import torch
 
@@ -78,16 +77,15 @@ def _provenance(**extra: Any) -> np.ndarray:
         "upstream_url": upstream.UPSTREAM_URL,
         "ports_commit": ports_commit,
         "fixtures_checksum": F.checksum(),
-        "torch": torch.__version__,
+        "torch": str(torch.__version__),
         "numpy": np.__version__,
         "python": sys.version.split()[0],
         "platform": platform.platform(),
-        # Deliberately no argv: it holds the --out path, which would make the committed
-        # fixtures differ depending on where they happened to be generated.
+        # no argv: the --out path would make the bundle depend on where it was generated
         "generated_utc": datetime.now(UTC).isoformat(),
         **extra,
     }
-    return np.array(json.dumps(payload, indent=2, sort_keys=True))
+    return payload
 
 
 def _regularizer(xv, *, a: float, p: float):
@@ -152,7 +150,7 @@ def _smooth_velocity(xv, nt: int) -> np.ndarray:
     return np.cumsum(np.cumsum(field, axis=1), axis=2) / (xv[0].size * xv[1].size)
 
 
-def _write_primitives(st, clouds: F.Clouds, out: Path) -> None:
+def _write_primitives(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     import torch
 
     # Source is the query (it moves); target is the ref. See `_rasters`.
@@ -223,47 +221,46 @@ def _write_primitives(st, clouds: F.Clouds, out: Path) -> None:
 
     ll, kernel, dv_prod = _regularizer([torch.as_tensor(x) for x in xv], a=F.LDDMM_PARAMS["a"], p=F.LDDMM_PARAMS["p"])
 
-    np.savez_compressed(
-        out / "primitives.npz",
-        __provenance__=_provenance(section="primitives"),
-        ref=clouds.ref,
-        query=clouds.query,
-        landmarks_ref=clouds.landmarks_ref,
-        landmarks_query=clouds.landmarks_query,
+    out["primitives"] = {
+        "provenance": _provenance(section="primitives"),
+        "ref": clouds.ref,
+        "query": clouds.query,
+        "landmarks_ref": clouds.landmarks_ref,
+        "landmarks_query": clouds.landmarks_query,
         # The source raster is the query's, the target raster is the ref's. Keys are
         # named after the cloud rather than the role so the two cannot be mixed up.
-        raster_query_x=xs,
-        raster_query_y=ys,
-        raster_query=source_image,
-        raster_ref_x=xt,
-        raster_ref_y=yt,
-        raster_ref=target_image,
-        interp_coords=grid,
-        interp_border=interp_border,
-        interp_coords_outside=outside,
-        interp_zeros_outside=interp_zeros_outside,
-        interp_border_outside=interp_border_outside,
-        to_A_linear=lin,
-        to_A_translation=trans,
-        to_A=affine,
-        xv_upstream_0=xv[0],
-        xv_upstream_1=xv[1],
-        velocity=smooth,
-        grid_backward=grid_backward,
-        points=pts,
-        points_forward=fwd,
-        points_backward=bwd,
-        points_roundtrip=roundtrip,
-        lt_well_L=lt_well[0],
-        lt_well_T=lt_well[1],
-        ill_src=ill_src,
-        ill_dst=ill_dst,
-        lt_ill_L=lt_ill[0],
-        lt_ill_T=lt_ill[1],
-        regularizer_LL=ll,
-        regularizer_K=kernel,
-        regularizer_DV=np.array(dv_prod),
-    )
+        "raster_query_x": xs,
+        "raster_query_y": ys,
+        "raster_query": source_image,
+        "raster_ref_x": xt,
+        "raster_ref_y": yt,
+        "raster_ref": target_image,
+        "interp_coords": grid,
+        "interp_border": interp_border,
+        "interp_coords_outside": outside,
+        "interp_zeros_outside": interp_zeros_outside,
+        "interp_border_outside": interp_border_outside,
+        "to_A_linear": lin,
+        "to_A_translation": trans,
+        "to_A": affine,
+        "xv_upstream_0": xv[0],
+        "xv_upstream_1": xv[1],
+        "velocity": smooth,
+        "grid_backward": grid_backward,
+        "points": pts,
+        "points_forward": fwd,
+        "points_backward": bwd,
+        "points_roundtrip": roundtrip,
+        "lt_well_L": lt_well[0],
+        "lt_well_T": lt_well[1],
+        "ill_src": ill_src,
+        "ill_dst": ill_dst,
+        "lt_ill_L": lt_ill[0],
+        "lt_ill_T": lt_ill[1],
+        "regularizer_LL": ll,
+        "regularizer_K": kernel,
+        "regularizer_DV": np.array(dv_prod),
+    }
 
 
 def _lddmm_kwargs(clouds: F.Clouds, rasters, *, with_points: bool, nt: int | None = None):
@@ -284,13 +281,13 @@ def _lddmm_kwargs(clouds: F.Clouds, rasters, *, with_points: bool, nt: int | Non
     return kwargs
 
 
-def _write_energy(st, clouds: F.Clouds, out: Path) -> None:
+def _write_energy(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     rasters = _rasters(st, clouds)
     lin, trans = st.L_T_from_points(clouds.landmarks_query_rc, clouds.landmarks_ref_rc)
 
     xv = _upstream_velocity_grid(st, rasters=rasters)
     payload: dict[str, Any] = {
-        "__provenance__": _provenance(section="energy"),
+        "provenance": _provenance(section="energy"),
         "L": lin,
         "T": trans,
         # Upstream's own velocity grid. `_lddmm_loss` takes `xv` explicitly, so the
@@ -316,10 +313,10 @@ def _write_energy(st, clouds: F.Clouds, out: Path) -> None:
             )
     payload["warm_velocity_nt1"] = _smooth_velocity(xv, 1)
     payload["warm_velocity_nt3"] = _smooth_velocity(xv, 3)
-    np.savez_compressed(out / "energy.npz", **payload)
+    out["energy"] = payload
 
 
-def _write_gradients(st, clouds: F.Clouds, out: Path) -> None:
+def _write_gradients(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     rasters = _rasters(st, clouds)
     lin, trans = st.L_T_from_points(clouds.landmarks_query_rc, clouds.landmarks_ref_rc)
     kwargs = _lddmm_kwargs(clouds, rasters, with_points=True)
@@ -362,28 +359,27 @@ def _write_gradients(st, clouds: F.Clouds, out: Path) -> None:
     warm_run, warm_captured = upstream.lddmm_with_grads(st, niter=1, L=lin, T=trans, xv=list(xv), v=warm, **kwargs)
     grad_v_warm = (warm - warm_run["v"].numpy()) / F.LDDMM_PARAMS["epV"]
 
-    np.savez_compressed(
-        out / "gradients.npz",
-        __provenance__=_provenance(section="gradients"),
-        L=lin,
-        T=trans,
+    out["gradients"] = {
+        "provenance": _provenance(section="gradients"),
+        "L": lin,
+        "T": trans,
         # Upstream's own grid; `_lddmm_loss` accepts `xv`, so squidpy differentiates the
         # objective in exactly this configuration.
-        xv_0=xv[0],
-        xv_1=xv[1],
-        grad_L=grad_l_hook,
-        grad_T=grad_t_hook,
-        grad_L_from_delta=grad_l_delta,
-        grad_T_from_delta=grad_t_delta,
-        grad_v_smoothed=grad_v,
-        warm_velocity=warm,
-        grad_L_warmv=warm_captured["L"][0].numpy(),
-        grad_T_warmv=warm_captured["T"][0].numpy(),
-        grad_v_smoothed_warmv=grad_v_warm,
-    )
+        "xv_0": xv[0],
+        "xv_1": xv[1],
+        "grad_L": grad_l_hook,
+        "grad_T": grad_t_hook,
+        "grad_L_from_delta": grad_l_delta,
+        "grad_T_from_delta": grad_t_delta,
+        "grad_v_smoothed": grad_v,
+        "warm_velocity": warm,
+        "grad_L_warmv": warm_captured["L"][0].numpy(),
+        "grad_T_warmv": warm_captured["T"][0].numpy(),
+        "grad_v_smoothed_warmv": grad_v_warm,
+    }
 
 
-def _write_trajectory(st, clouds: F.Clouds, out: Path) -> None:
+def _write_trajectory(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     rasters = _rasters(st, clouds)
     lin, trans = st.L_T_from_points(clouds.landmarks_query_rc, clouds.landmarks_ref_rc)
 
@@ -402,7 +398,7 @@ def _write_trajectory(st, clouds: F.Clouds, out: Path) -> None:
         nxt = st.LDDMM(niter=niter + 1, L=lin, T=trans, xv=list(xv), v=v0, **kwargs)
 
         payload: dict[str, Any] = {
-            "__provenance__": _provenance(section=f"trajectory_n{niter}", niter=niter),
+            "provenance": _provenance(section=f"trajectory_n{niter}", niter=niter),
             "xv_0": xv[0],
             "xv_1": xv[1],
             "L": lin,
@@ -429,10 +425,10 @@ def _write_trajectory(st, clouds: F.Clouds, out: Path) -> None:
                 "E_first": np.array(captured["E"][0]),
                 "E_last": np.array(captured["E"][-1]),
             }
-            name = f"converged_n{niter}.npz"
+            name = f"converged_n{niter}"
         else:
-            name = f"trajectory_n{niter}.npz"
-        np.savez_compressed(out / name, **payload)
+            name = f"trajectory_n{niter}"
+        out[name] = payload
 
 
 #: Solver settings for the image path. `fit_stalign_image` works in pixel units, so the
@@ -472,7 +468,7 @@ def _centred_axes(shape: tuple[int, int]) -> list[np.ndarray]:
 MIXED_TARGET_STEP = 30.0
 
 
-def _write_image_mixed_units(st, clouds: F.Clouds, out: Path) -> None:
+def _write_image_mixed_units(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     """Upstream run on a source and target whose axes are in *different* units.
 
     Every other image fixture places both sides on centred pixel axes, so each carries one
@@ -499,27 +495,26 @@ def _write_image_mixed_units(st, clouds: F.Clouds, out: Path) -> None:
     run = st.LDDMM(niter=IMAGE_ITERS, **kwargs)
     nxt = st.LDDMM(niter=IMAGE_ITERS + 1, **kwargs)
 
-    np.savez_compressed(
-        out / "image_mixed_units.npz",
-        __provenance__=_provenance(section="image_mixed_units", niter=IMAGE_ITERS),
-        start_L=lin,
-        start_T=trans,
-        source_axis_0=x_source[0],
-        source_axis_1=x_source[1],
-        target_axis_0=x_target[0],
-        target_axis_1=x_target[1],
-        query=query,
-        ref=ref,
-        a=np.asarray(params["a"]),
-        A=nxt["A"].numpy(),
-        v=run["v"].numpy(),
-        WM=run["WM"].numpy(),
-        xv_0=run["xv"][0].numpy(),
-        xv_1=run["xv"][1].numpy(),
-    )
+    out["image_mixed_units"] = {
+        "provenance": _provenance(section="image_mixed_units", niter=IMAGE_ITERS),
+        "start_L": lin,
+        "start_T": trans,
+        "source_axis_0": x_source[0],
+        "source_axis_1": x_source[1],
+        "target_axis_0": x_target[0],
+        "target_axis_1": x_target[1],
+        "query": query,
+        "ref": ref,
+        "a": np.asarray(params["a"]),
+        "A": nxt["A"].numpy(),
+        "v": run["v"].numpy(),
+        "WM": run["WM"].numpy(),
+        "xv_0": run["xv"][0].numpy(),
+        "xv_1": run["xv"][1].numpy(),
+    }
 
 
-def _write_image_trajectory_matched(st, clouds: F.Clouds, out: Path) -> None:
+def _write_image_trajectory_matched(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     """The same comparison with both images cropped to a common extent.
 
     The control for `image_trajectory`. There the two rasters have different shapes, and
@@ -541,22 +536,21 @@ def _write_image_trajectory_matched(st, clouds: F.Clouds, out: Path) -> None:
     nxt = st.LDDMM(niter=IMAGE_ITERS + 1, **kwargs)
     _, captured = upstream.lddmm_with_grads(st, niter=IMAGE_ITERS, **kwargs)
 
-    np.savez_compressed(
-        out / "image_trajectory_matched.npz",
-        __provenance__=_provenance(section="image_trajectory_matched", niter=IMAGE_ITERS),
-        start_L=lin,
-        start_T=trans,
-        axis_0=x_source[0],
-        axis_1=x_source[1],
-        query=query,
-        ref=ref,
-        A=nxt["A"].numpy(),
-        v=run["v"].numpy(),
-        energies=np.asarray(captured["E"], dtype=float),
-    )
+    out["image_trajectory_matched"] = {
+        "provenance": _provenance(section="image_trajectory_matched", niter=IMAGE_ITERS),
+        "start_L": lin,
+        "start_T": trans,
+        "axis_0": x_source[0],
+        "axis_1": x_source[1],
+        "query": query,
+        "ref": ref,
+        "A": nxt["A"].numpy(),
+        "v": run["v"].numpy(),
+        "energies": np.asarray(captured["E"], dtype=float),
+    }
 
 
-def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
+def _write_image_trajectory(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     """Upstream run on the image path's own axes.
 
     `fit_stalign_image` is a public entry point with a different coordinate convention
@@ -588,28 +582,27 @@ def _write_image_trajectory(st, clouds: F.Clouds, out: Path) -> None:
     # of build_transform + interp, rather than reassembling it here.
     warped = st.transform_image_source_to_target(run["xv"], run["v"], nxt["A"], x_source, query, x_target)
 
-    np.savez_compressed(
-        out / "image_trajectory.npz",
-        __provenance__=_provenance(section="image_trajectory", niter=IMAGE_ITERS),
-        start_L=_image_start()[0],
-        start_T=_image_start()[1],
-        source_axis_0=x_source[0],
-        source_axis_1=x_source[1],
-        target_axis_0=x_target[0],
-        target_axis_1=x_target[1],
-        query=query,
-        ref=ref,
-        A=nxt["A"].numpy(),
-        A_stale=run["A"].numpy(),
-        v=run["v"].numpy(),
-        WM=run["WM"].numpy(),
-        WA=run["WA"].numpy(),
-        WB=run["WB"].numpy(),
-        warped=warped.numpy(),
-        energies=np.asarray(captured["E"], dtype=float),
-        xv_0=run["xv"][0].numpy(),
-        xv_1=run["xv"][1].numpy(),
-    )
+    out["image_trajectory"] = {
+        "provenance": _provenance(section="image_trajectory", niter=IMAGE_ITERS),
+        "start_L": _image_start()[0],
+        "start_T": _image_start()[1],
+        "source_axis_0": x_source[0],
+        "source_axis_1": x_source[1],
+        "target_axis_0": x_target[0],
+        "target_axis_1": x_target[1],
+        "query": query,
+        "ref": ref,
+        "A": nxt["A"].numpy(),
+        "A_stale": run["A"].numpy(),
+        "v": run["v"].numpy(),
+        "WM": run["WM"].numpy(),
+        "WA": run["WA"].numpy(),
+        "WB": run["WB"].numpy(),
+        "warped": warped.numpy(),
+        "energies": np.asarray(captured["E"], dtype=float),
+        "xv_0": run["xv"][0].numpy(),
+        "xv_1": run["xv"][1].numpy(),
+    }
 
 
 #: Solver settings for the volume-to-section path. Upstream's `LDDMM_3D_to_slice`
@@ -686,7 +679,7 @@ def _slice_start() -> tuple[np.ndarray, np.ndarray]:
     return SLICE_SCALE * rotation, np.array(SLICE_SHIFT)
 
 
-def _write_slice(st, clouds: F.Clouds, out: Path) -> None:
+def _write_slice(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     """Upstream ``LDDMM_3D_to_slice``, in the two regimes that can be compared.
 
     The velocity is frozen for the trajectory comparison (``diffeo_start`` past
@@ -771,41 +764,40 @@ def _write_slice(st, clouds: F.Clouds, out: Path) -> None:
         padding_mode="border",
     )
 
-    np.savez_compressed(
-        out / "slice_trajectory.npz",
-        __provenance__=_provenance(section="slice_trajectory", niter=SLICE_ITERS),
-        start_L=linear,
-        start_T=translation,
-        ref_axis_0=x_reference[0],
-        ref_axis_1=x_reference[1],
-        ref_axis_2=x_reference[2],
-        query_axis_0=x_section[0],
-        query_axis_1=x_section[1],
-        ref=reference,
-        query=section,
-        A=nxt["A"].numpy(),
-        A_stale=run["A"].numpy(),
-        to_A=st.to_A_3D(torch.as_tensor(linear), torch.as_tensor(translation)).detach().numpy(),
-        WM=run["WM"].numpy(),
-        WA=run["WA"].numpy(),
-        WB=run["WB"].numpy(),
-        Xs=run["Xs"].numpy(),
-        energies=np.asarray(captured["E"], dtype=float),
-        grad_L=torch.stack(captured["L"]).numpy(),
-        grad_T=torch.stack(captured["T"]).numpy(),
-        xv_0=xv[0],
-        xv_1=xv[1],
-        xv_2=xv[2],
-        velocity=velocity,
-        regularizer_LL=LL.numpy(),
-        regularizer_K=K.numpy(),
-        regularizer_DV=DV.numpy(),
-        ER_2axis=np.array(float(er_2axis)),
-        ER_3axis=np.array(float(er_3axis)),
-        grid_backward=grid_backward.numpy(),
-        interp_border=sampled.numpy(),
-        interp_nearest=sampled_nearest.numpy(),
-    )
+    out["slice_trajectory"] = {
+        "provenance": _provenance(section="slice_trajectory", niter=SLICE_ITERS),
+        "start_L": linear,
+        "start_T": translation,
+        "ref_axis_0": x_reference[0],
+        "ref_axis_1": x_reference[1],
+        "ref_axis_2": x_reference[2],
+        "query_axis_0": x_section[0],
+        "query_axis_1": x_section[1],
+        "ref": reference,
+        "query": section,
+        "A": nxt["A"].numpy(),
+        "A_stale": run["A"].numpy(),
+        "to_A": st.to_A_3D(torch.as_tensor(linear), torch.as_tensor(translation)).detach().numpy(),
+        "WM": run["WM"].numpy(),
+        "WA": run["WA"].numpy(),
+        "WB": run["WB"].numpy(),
+        "Xs": run["Xs"].numpy(),
+        "energies": np.asarray(captured["E"], dtype=float),
+        "grad_L": torch.stack(captured["L"]).numpy(),
+        "grad_T": torch.stack(captured["T"]).numpy(),
+        "xv_0": xv[0],
+        "xv_1": xv[1],
+        "xv_2": xv[2],
+        "velocity": velocity,
+        "regularizer_LL": LL.numpy(),
+        "regularizer_K": K.numpy(),
+        "regularizer_DV": DV.numpy(),
+        "ER_2axis": np.array(float(er_2axis)),
+        "ER_3axis": np.array(float(er_3axis)),
+        "grid_backward": grid_backward.numpy(),
+        "interp_border": sampled.numpy(),
+        "interp_nearest": sampled_nearest.numpy(),
+    }
 
 
 def _smooth_velocity_3d(xv, nt: int) -> np.ndarray:
@@ -817,36 +809,31 @@ def _smooth_velocity_3d(xv, nt: int) -> np.ndarray:
     return field / (xv[0].size * xv[1].size * xv[2].size)
 
 
-def _pack(npz_dir: Path, out: Path) -> None:
-    """Write every ``.npz`` in ``npz_dir`` into one zipped zarr store at ``out``."""
-    import zarr
+def _write_bundle(sections: dict[str, dict], out: Path) -> None:
+    """Write every section into ``uns`` of one AnnData, stored as a zipped zarr store at ``out``."""
+    import zipfile
+
+    import anndata as ad
     from zarr.storage import ZipStore
 
+    def arrays(section: dict) -> dict:
+        return {key: value if key == "provenance" else np.asarray(value) for key, value in section.items()}
+
+    fixtures = {
+        "checksum": F.checksum(),
+        "SEED": F.SEED,
+        "RASTER_PARAMS": {key: np.asarray(value) for key, value in F.RASTER_PARAMS.items()},
+        "LDDMM_PARAMS": F.LDDMM_PARAMS,
+        "MIXED_TARGET_STEP": MIXED_TARGET_STEP,
+    }
+    adata = ad.AnnData(uns={"fixtures": fixtures, **{name: arrays(section) for name, section in sections.items()}})
     out.unlink(missing_ok=True)
-    with ZipStore(out, mode="w") as store:
-        root = zarr.open_group(store, mode="w")
-        root.attrs.update(
-            {
-                "fixtures_checksum": F.checksum(),
-                "SEED": F.SEED,
-                "RASTER_PARAMS": F.RASTER_PARAMS,
-                "LDDMM_PARAMS": F.LDDMM_PARAMS,
-                "MIXED_TARGET_STEP": MIXED_TARGET_STEP,
-            }
-        )
-        for path in sorted(npz_dir.glob("*.npz")):
-            data = np.load(path)
-            group = root.create_group(path.stem)
-            group.attrs["provenance"] = json.loads(str(data["__provenance__"]))
-            for key in data.files:
-                if key != "__provenance__":
-                    group.create_array(key, data=data[key])
+    with ZipStore(out, mode="w", compression=zipfile.ZIP_DEFLATED) as store:
+        adata.write_zarr(store)
 
 
 def main(argv: list[str] | None = None) -> int:
     """Generate the whole bundle."""
-    import tempfile
-
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True, help="the .zarr.zip store to write")
     args = parser.parse_args(argv)
@@ -855,25 +842,24 @@ def main(argv: list[str] | None = None) -> int:
     st = upstream.load()
     clouds = F.make_clouds()
 
-    with tempfile.TemporaryDirectory() as tmp:
-        npz_dir = Path(tmp)
-        for step, fn in (
-            ("primitives", _write_primitives),
-            ("energy", _write_energy),
-            ("gradients", _write_gradients),
-            ("trajectory", _write_trajectory),
-            ("image_trajectory", _write_image_trajectory),
-            ("image_trajectory_matched", _write_image_trajectory_matched),
-            ("image_mixed_units", _write_image_mixed_units),
-            ("slice_trajectory", _write_slice),
-        ):
-            print(f"generating {step}...", flush=True)
-            fn(st, clouds, npz_dir)
+    sections: dict[str, dict] = {}
+    for step, fn in (
+        ("primitives", _write_primitives),
+        ("energy", _write_energy),
+        ("gradients", _write_gradients),
+        ("trajectory", _write_trajectory),
+        ("image_trajectory", _write_image_trajectory),
+        ("image_trajectory_matched", _write_image_trajectory_matched),
+        ("image_mixed_units", _write_image_mixed_units),
+        ("slice_trajectory", _write_slice),
+    ):
+        print(f"generating {step}...", flush=True)
+        fn(st, clouds, sections)
 
-        import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
 
-        plt.close("all")  # upstream leaks 4 figures per LDDMM call
-        _pack(npz_dir, args.out)
+    plt.close("all")  # upstream leaks 4 figures per LDDMM call
+    _write_bundle(sections, args.out)
     print(f"wrote {args.out}")
     return 0
 

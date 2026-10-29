@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   generate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       MKL_NUM_THREADS: "1"
       MPLBACKEND: agg
@@ -28,6 +28,7 @@ jobs:
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           enable-cache: true
+          python-version: "3.13"
 
       - name: Generate
         run: |
@@ -39,14 +40,18 @@ jobs:
           uv run python -m squidpy_ports.stalign.generate --out again.zarr.zip
           uv run python - <<'PY'
           import sys
+          import anndata as ad
           import numpy as np
-          import zarr
           from zarr.storage import ZipStore
 
-          a = zarr.open_group(ZipStore("stalign_reference.zarr.zip", mode="r"), mode="r")
-          b = zarr.open_group(ZipStore("again.zarr.zip", mode="r"), mode="r")
-          bad = [f"{name}/{key}" for name, group in a.groups() for key, array in group.arrays()
-                 if not np.array_equal(array[...], b[name][key][...])]
+          def load(path):
+              with ZipStore(path, mode="r") as store:
+                  return ad.read_zarr(store).uns
+
+          a, b = load("stalign_reference.zarr.zip"), load("again.zarr.zip")
+          bad = [f"{name}/{key}" for name, section in a.items() if name != "fixtures"
+                 for key, value in section.items() if key != "provenance"
+                 and not np.array_equal(value, b[name][key])]
           if bad:
               sys.exit("not reproducible: " + ", ".join(bad))
           print("bit-identical across runs")

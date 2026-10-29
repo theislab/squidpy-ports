@@ -20,20 +20,22 @@ checks against a pinned sha256.
   differ along the way, or differ at the end because of one early step. Storing every stage
   (rasterisation, energy, gradients, a few iterations, the converged fit) means a failing test
   points at the stage that broke, not only at a wrong final affine.
-- **One file, pinned by hash.** A zipped zarr store is one download, can't change silently, and
-  holds the provenance next to the numbers. squidpy needs only `zarr` and `pooch` to read it.
+- **One file, pinned by hash.** An AnnData in a zipped zarr store is one download, can't change
+  silently, holds the provenance next to the numbers, and reads with `anndata.read_zarr`, which
+  squidpy already depends on.
 
 The inputs are synthetic and seeded (`src/squidpy_ports/stalign/fixtures.py`); no upstream data is
 redistributed.
 
 ## What it holds
 
-The root attributes hold the fixture parameters the tests reuse (`SEED`, `RASTER_PARAMS`,
-`LDDMM_PARAMS`, `MIXED_TARGET_STEP`) and the checksum of `fixtures.py`. Each group carries a
-`provenance` attribute: upstream commit, squidpy-ports commit, torch / numpy / Python versions,
+It is an empty AnnData whose `uns` holds everything. `uns["fixtures"]` has the fixture parameters
+the tests reuse (`SEED`, `RASTER_PARAMS`, `LDDMM_PARAMS`, `MIXED_TARGET_STEP`) and the checksum
+of `fixtures.py`. Every other `uns` entry is one section, a dict of arrays, and carries a
+`provenance` entry: upstream commit, squidpy-ports commit, torch / numpy / Python versions,
 platform and timestamp.
 
-| Group | What upstream computed | What it pins in squidpy |
+| `uns` entry | What upstream computed | What it pins in squidpy |
 | --- | --- | --- |
 | `primitives` | The point clouds and landmarks, rasters and their axes, interpolation inside and outside the domain, the regulariser, the backward grid, point transforms, affines from well- and ill-conditioned landmarks | Each building block on its own, at ~1e-12 |
 | `energy` | The objective at iteration 0, with and without landmarks, for `nt=1` and `nt=3`, at zero and at a warm velocity | `_lddmm_loss` evaluates the same function |
