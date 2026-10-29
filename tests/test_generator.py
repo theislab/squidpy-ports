@@ -18,24 +18,9 @@ import pytest
 from squidpy_ports.stalign import fixtures as F
 from squidpy_ports.stalign import upstream
 
+
 #: The port hands these to `jax.jit` as static arguments, so each one must arrive as a
 #: hashable Python scalar (`_core.py` `static_argnames`).
-STATIC_ARGUMENTS = (
-    "niter",
-    "diffeo_start",
-    "epL",
-    "epT",
-    "epV",
-    "sigmaM",
-    "sigmaA",
-    "sigmaB",
-    "sigmaR",
-    "sigmaP",
-    "tol",
-    "patience",
-)
-
-
 def test_vendored_upstream_is_pinned(stalign):
     assert hasattr(stalign, "LDDMM")
     assert hasattr(stalign, "rasterize")
@@ -127,11 +112,6 @@ def test_fixture_transform_is_not_round(name):
     assert np.all(np.abs(value - np.round(value, 2)) > 1e-6)
 
 
-# --------------------------------------------------------------------------------------
-# The rank-3 (volume-to-section) comparison's conversion helpers
-# --------------------------------------------------------------------------------------
-
-
 def test_reference_figures_are_verbatim_upstream_output():
     """Every published figure on the comparison page is upstream's own, unrecomputed.
 
@@ -169,27 +149,3 @@ def test_reference_figures_are_verbatim_upstream_output():
             f"{name} is not byte-identical to any image upstream committed at "
             f"{notebook} cell {cell} -- it was recomputed, edited, or the cell is wrong"
         )
-
-
-def test_squidpy_commit_prefers_the_install_record_and_never_guesses(monkeypatch):
-    """A manifest may record the squidpy commit only when it can prove it.
-
-    A VCS install carries the resolved sha in pip's metadata; an editable install of a
-    working tree carries only a directory, which is why the staged cluster job resolves the
-    commit itself and passes `SQUIDPY_COMMIT`. With neither, the answer is `None` -- a
-    manifest admitting it does not know beats one asserting a commit it cannot substantiate.
-    """
-    from squidpy_ports.stalign import upstream
-
-    monkeypatch.delenv("SQUIDPY_COMMIT", raising=False)
-    # no install record, no env var -> no claim
-    monkeypatch.setattr("importlib.metadata.distribution", lambda _: (_ for _ in ()).throw(FileNotFoundError))
-    assert upstream.squidpy_commit() is None
-
-    # the staged job's value is used when pip cannot answer
-    monkeypatch.setenv("SQUIDPY_COMMIT", "0123456789abcdef")
-    assert upstream.squidpy_commit() == "0123456789abcdef"
-
-    # an empty env var is not a commit
-    monkeypatch.setenv("SQUIDPY_COMMIT", "")
-    assert upstream.squidpy_commit() is None

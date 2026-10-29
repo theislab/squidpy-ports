@@ -9,7 +9,6 @@ keeps a GPL-3.0 project out of this package's dependency metadata.
 from __future__ import annotations
 
 import importlib.util
-import json
 import os
 import subprocess
 from functools import cache
@@ -17,7 +16,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-__all__ = ["UPSTREAM_SHA", "UPSTREAM_URL", "load", "lddmm_with_grads", "squidpy_commit", "vendor_root"]
+__all__ = ["UPSTREAM_SHA", "UPSTREAM_URL", "load", "lddmm_with_grads", "vendor_root"]
 
 #: The single upstream commit this package is a reference for. Upstream has no tags and
 #: no releases; without a pin, "correct" silently changes under us.
@@ -48,31 +47,6 @@ def _checkout_sha(root: Path) -> str:
         f"cannot verify vendored STalign at {root}: Git metadata is unavailable and "
         "`SQUIDPY_PORTS_STALIGN_SHA` was not set by the staging job"
     )
-
-
-def squidpy_commit() -> str | None:
-    """The squidpy commit a result came from, or ``None`` when it cannot be proven.
-
-    Mirrors :func:`_checkout_sha`. A ``git+https://...@<sha>`` install records the resolved
-    commit in pip's ``direct_url.json``, so a container built from the pinned fork stamps its
-    own provenance. An **editable** install of a working tree records only a directory, which
-    is why the staged cluster job resolves the commit while Git metadata is still available
-    and passes it in as ``SQUIDPY_COMMIT``.
-
-    Returns ``None`` rather than guessing: a manifest claiming a commit it cannot substantiate
-    is worse than one admitting it does not know.
-    """
-    from importlib.metadata import PackageNotFoundError, distribution
-
-    try:
-        raw = distribution("squidpy").read_text("direct_url.json")
-    except (PackageNotFoundError, FileNotFoundError):
-        raw = None
-    if raw:
-        commit = json.loads(raw).get("vcs_info", {}).get("commit_id")
-        if commit:
-            return commit
-    return os.environ.get("SQUIDPY_COMMIT") or None
 
 
 @cache
