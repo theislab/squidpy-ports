@@ -22,7 +22,7 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 | --- | --- |
 | **squidpy API equivalence** | [Sixteen of STalign's seventeen analyses][api], rewritten against `squidpy.experimental.tl` and executed on a GPU — one page per upstream notebook, each linking the original it mirrors. |
 | **Numerical tests** | [`tests/test_generator.py`][ports-tests] guards this repo's own inputs — the vendored pin, the fixture definitions, the provenance stamp. The port itself is asserted against upstream at rank 2 and rank 3 in squidpy, by [`test_stalign_reference.py`][ref-tests], which downloads the bundle this repo publishes. |
-| **Regenerate the reference bundle** | [Running the tests](#running-the-tests) — the command, the provenance blob, and the platform caveat that matters before you publish one. |
+| **Reference bundle** | [What it holds and why it is stored][bundle]; [publishing a new one](#publishing-the-reference-bundle). |
 | **Reproduce on any GPU box** | [`container/README.md`][container] — one pinned container, any GPU box. |
 
 The executed notebooks are corroboration, not the gate. The gate is
@@ -89,6 +89,7 @@ If you found a bug, please use the [issue tracker][].
 
 [api]: https://theislab.github.io/squidpy-ports/squidpy-api.html
 [ports-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_generator.py
+[bundle]: https://theislab.github.io/squidpy-ports/reference-bundle.html
 [ref-tests]: https://github.com/scverse/squidpy/blob/main/tests/experimental/tl/test_stalign_reference.py
 [container]: https://github.com/theislab/squidpy-ports/blob/main/container/README.md
 [license-vendor]: https://github.com/theislab/squidpy-ports/blob/main/LICENSE.vendor

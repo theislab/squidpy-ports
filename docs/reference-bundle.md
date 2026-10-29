@@ -1,0 +1,53 @@
+# Reference bundle
+
+squidpy's [`test_stalign_reference.py`](https://github.com/scverse/squidpy/blob/main/tests/experimental/tl/test_stalign_reference.py)
+compares the port against numbers upstream STalign computed. Those numbers are generated here, once,
+and published as one file: `stalign_reference.zarr.zip`, a release asset that squidpy downloads and
+checks against a pinned sha256.
+
+## Why the outputs are stored rather than recomputed
+
+- **Upstream can't be a squidpy test dependency.** It is GPL-3.0, runs on PyTorch, and pins
+  `numpy==1.23.4` / `torch==2.0.0`, which have no wheels for current Pythons. It is vendored here
+  at a fixed commit and never installed.
+- **The outputs never change unless the inputs do.** Upstream is pinned and the inputs are seeded,
+  so every run produces the same numbers. Recomputing them in every squidpy CI job would cost
+  torch, the vendored checkout and a minute of CPU, and add nothing.
+- **They're generated on one platform.** BLAS/FFT reduction order differs between macOS
+  Accelerate and Linux OpenBLAS, so the bundle is generated once on ubuntu, the platform squidpy's
+  CI compares on, and the workflow checks that a second run is bit-identical.
+- **The intermediate values say where a disagreement starts.** A port can match at the end and
+  differ along the way, or differ at the end because of one early step. Storing every stage
+  (rasterisation, energy, gradients, a few iterations, the converged fit) means a failing test
+  points at the stage that broke, not only at a wrong final affine.
+- **One file, pinned by hash.** A zipped zarr store is one download, can't change silently, and
+  holds the provenance next to the numbers. squidpy needs only `zarr` and `pooch` to read it.
+
+The inputs are synthetic and seeded (`src/squidpy_ports/stalign/fixtures.py`); no upstream data is
+redistributed.
+
+## What it holds
+
+The root attributes hold the fixture parameters the tests reuse (`SEED`, `RASTER_PARAMS`,
+`LDDMM_PARAMS`, `MIXED_TARGET_STEP`) and the checksum of `fixtures.py`. Each group carries a
+`provenance` attribute: upstream commit, squidpy-ports commit, torch / numpy / Python versions,
+platform and timestamp.
+
+| Group | What upstream computed | What it pins in squidpy |
+| --- | --- | --- |
+| `primitives` | The point clouds and landmarks, rasters and their axes, interpolation inside and outside the domain, the regulariser, the backward grid, point transforms, affines from well- and ill-conditioned landmarks | Each building block on its own, at ~1e-12 |
+| `energy` | The objective at iteration 0, with and without landmarks, for `nt=1` and `nt=3`, at zero and at a warm velocity | `_lddmm_loss` evaluates the same function |
+| `gradients` | `dE/dL`, `dE/dT` and the smoothed `dE/dv`, at zero and at a warm velocity | The gradients the descent follows |
+| `trajectory_n1`, `_n5`, `_n50` | The state after 1, 5 and 50 iterations | That the loop matches step by step; 50 is past the first mixture-weight update at iteration 50 |
+| `converged_n500` | A full 500-iteration run, with target registration error | That a converged fit lands where upstream's does |
+| `image_trajectory` | The image path on two differently shaped rasters, its energy trace and the warped image | `fit_stalign_image`, `warp_image` and the public `stalign_align_image` |
+| `image_trajectory_matched` | The same images sampled exactly on grid lines | The pinned cost of on-grid sampling |
+| `image_mixed_units` | A source and target in different units | The velocity grid upstream builds for mixed units |
+| `slice_trajectory` | Section-into-volume (`LDDMM_3D_to_slice`): interpolation, regulariser over two and three axes, trajectory and transforms | The rank-3 solver and `sample_volume`, plus the strict xfail on the rank-3 divergence |
+
+## Regenerating
+
+Regenerate when the upstream pin or `fixtures.py` changes. Run the `Generate reference bundle`
+workflow with a new release tag, then point squidpy's `_BUNDLE_URL` and `_BUNDLE_SHA256` at the new
+asset and the hash the workflow prints. `hatch run generate:run --out stalign_reference.zarr.zip`
+writes the same store locally, but don't publish a local build.
