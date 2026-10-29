@@ -21,12 +21,12 @@ Currently covers: **STalign** (see [scverse/squidpy#1243]).
 | | |
 | --- | --- |
 | **squidpy API equivalence** | [Sixteen of STalign's seventeen analyses][api], rewritten against `squidpy.experimental.tl` and executed on a GPU — one page per upstream notebook, each linking the original it mirrors. |
-| **Numerical tests** | Two suites, split by what they are allowed to touch: [`tests/test_generator.py`][ports-tests] guards this repo's own inputs — the vendored pin, the fixture definitions, the provenance stamp; [`tests/test_reference.py`][ref-tests] asserts the port against upstream at rank 2 and rank 3. |
-| **Regenerate the reference bundle** | [Running the tests](#running-the-tests) — the command, the provenance blob, and the platform caveat that matters before you commit one. |
+| **Numerical tests** | [`tests/test_generator.py`][ports-tests] guards this repo's own inputs — the vendored pin, the fixture definitions, the provenance stamp. The port itself is asserted against upstream at rank 2 and rank 3 in squidpy, by [`test_stalign_reference.py`][ref-tests], which downloads the bundle this repo publishes. |
+| **Reference bundle** | [What it holds and why it is stored][bundle]; [publishing a new one](#publishing-the-reference-bundle). |
 | **Reproduce on any GPU box** | [`container/README.md`][container] — one pinned container, any GPU box. |
 
 The executed notebooks are corroboration, not the gate. The gate is
-`tests/test_reference.py`, which compares the port at every layer — rasterisation, energy,
+[`test_stalign_reference.py`][ref-tests] in squidpy, which compares the port at every layer — rasterisation, energy,
 gradients, trajectory, converged fit, image warp, and the section-into-volume fit. At rank 2 it
 matches upstream to ~1e-15 on the velocity field. At rank 3 it matches the solver on the seeded
 fixture, but the two implementations descend on different objectives once the velocity moves:
@@ -34,11 +34,9 @@ upstream regularises over two spatial axes while smoothing that energy's gradien
 divergence is pinned by a strict xfail rather than asserted away, and the xfail's own docstring
 says what it costs.
 
-**Which suite a test belongs to.** squidpy owns the public path: `align_stalign_*`,
-`align_landmarks`, `rasterize_points`, `sample_volume`, asserted through their public entry points
-only. This repository owns everything that imports a private name or compares against a value
-upstream computed — which is the whole of `tests/test_reference.py`, and why it lives here rather
-than in squidpy's CI.
+**Which repository holds what.** squidpy holds every test of squidpy, the reference comparison
+included, so a change that breaks the port fails in the PR that makes it. This repository holds
+what produces the references: the vendored upstream, the generator, and the published bundle.
 
 ## Licensing
 
@@ -54,7 +52,7 @@ inputs defined in this repository — no upstream data is copied or redistribute
 | Path | What it is |
 | --- | --- |
 | `vendor/STalign` | Upstream, pinned to one commit. Never edited, never linted, never pip-installed. |
-| `src/squidpy_ports/stalign/fixtures.py` | Input definitions. **Vendored byte-identically into squidpy**; depends on numpy only. |
+| `src/squidpy_ports/stalign/fixtures.py` | Input definitions, shared by the generator and the tests; depends on numpy only. |
 | `src/squidpy_ports/stalign/upstream.py` | Loads upstream by path, asserts the pin, and observes the LDDMM loop. |
 | `src/squidpy_ports/stalign/generate.py` | Writes the `.npz` bundle. |
 
@@ -68,34 +66,21 @@ observing the unmodified `LDDMM` loop.
 
 ## Running the tests
 
-This repo's own suite guards the generator. It needs nothing but a clone:
-
 ```bash
-pytest
+hatch test
 ```
 
-One test skips without squidpy and JAX installed — deliberately, since this repo does not depend on
-either. Install both and it runs.
+`tests/test_generator.py` guards the generator and needs the `vendor/STalign` submodule.
 
-`tests/test_reference.py` is the layer that asserts the *port*. It needs squidpy and JAX,
-so it skips without them; install squidpy and it runs. Every upstream value it compares against is
-computed **in this process** from the vendored checkout, by the same generator that writes the
-shareable bundle — so no committed binary can go stale, here or in squidpy. No GPU: float64 on CPU,
-about 80 s on a laptop.
+## Publishing the reference bundle
 
-```bash
-uv pip install -e ".[test]" -e /path/to/squidpy"[jax]" pytest
-MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_ENABLE_X64=1 pytest tests/test_reference.py
-```
-
-> **`JAX_ENABLE_X64=1` is not optional.** Upstream is double throughout; without it the port runs in
-> single precision and every tolerance in the suite is meaningless. The suite skips rather than
-> lying if the flag is absent, and it has to come from the environment — `jax.config.update` is
-> process-global and would flip the float32 tests in squidpy's own suite in the same worker.
-
-The `.npz` bundle is still what a *shareable* reference looks like, and
-`python -m squidpy_ports.stalign.generate --out DIR` writes it. Nothing in this repo's tests reads
-it from disk; it exists for anyone who wants the numbers without a torch install.
+Run the `Generate reference bundle` workflow with a release tag. It writes
+`stalign_reference.zarr.zip` (one zarr group per section, its provenance in the group's
+attributes, the fixture parameters in the root's), checks that a second run is bit-identical,
+and publishes it as a release asset. Then point squidpy's `test_stalign_reference.py` at the new
+URL and the sha256 the workflow prints. It runs on ubuntu because BLAS/FFT reduction order
+differs across platforms; `hatch run generate:run --out stalign_reference.zarr.zip` writes the
+same store locally.
 
 ## Contact
 
@@ -104,7 +89,8 @@ If you found a bug, please use the [issue tracker][].
 
 [api]: https://theislab.github.io/squidpy-ports/squidpy-api.html
 [ports-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_generator.py
-[ref-tests]: https://github.com/theislab/squidpy-ports/blob/main/tests/test_reference.py
+[bundle]: https://theislab.github.io/squidpy-ports/reference-bundle.html
+[ref-tests]: https://github.com/scverse/squidpy/blob/main/tests/experimental/tl/test_stalign_reference.py
 [container]: https://github.com/theislab/squidpy-ports/blob/main/container/README.md
 [license-vendor]: https://github.com/theislab/squidpy-ports/blob/main/LICENSE.vendor
 [scverse discourse]: https://discourse.scverse.org/

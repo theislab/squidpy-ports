@@ -39,6 +39,7 @@ dependencies = [
   "session-info2",
   "torch",
   "tornado",
+  "zarr>=3",
 ]
 optional-dependencies.dev = [
   "pre-commit",
@@ -85,8 +86,7 @@ python = [ "3.13" ]
 
 [tool.hatch.envs.hatch-test]
 features = [ "dev", "test" ]
-
-# Emit the reference bundle consumed by squidpy's tests/_data/stalign_reference/.
+# Emit the reference bundle squidpy's STalign reference tests download (stalign_reference.zarr.zip).
 [tool.hatch.envs.generate]
 installer = "uv"
 scripts.run = "python -m squidpy_ports.stalign.generate {args}"
