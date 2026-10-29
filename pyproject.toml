@@ -63,7 +63,7 @@ optional-dependencies.test = [
   "pytest-cov",     # For VS Code’s coverage functionality
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
-urls.Documentation = "https://theislab.github.io/squidpy-ports/"
+urls.Documentation = "https://squidpy-ports.readthedocs.io/"
 urls.Homepage = "https://github.com/theislab/squidpy-ports"
 urls.Source = "https://github.com/theislab/squidpy-ports"
 
