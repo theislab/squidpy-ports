@@ -8,9 +8,8 @@ keeps a GPL-3.0 project out of this package's dependency metadata.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
-import os
-import subprocess
 from functools import cache
 from pathlib import Path
 from types import ModuleType
@@ -22,31 +21,14 @@ __all__ = ["UPSTREAM_SHA", "UPSTREAM_URL", "load", "lddmm_with_grads", "vendor_r
 #: no releases; without a pin, "correct" silently changes under us.
 UPSTREAM_SHA = "b2068edc98974efa54537eca194736e177bbe11d"
 UPSTREAM_URL = "https://github.com/JEFworks-Lab/STalign"
+#: sha256 of ``STalign/STalign.py`` at :data:`UPSTREAM_SHA`, so the pin is checked on the code
+#: that runs, with or without git metadata (the container ships the tree without ``.git``).
+STALIGN_PY_SHA256 = "4a0833dd554330515f949ff3bc1fcbb6ce9be17088d05a33b09bb2f12d71fac5"
 
 
 def vendor_root() -> Path:
     """Path to the vendored upstream checkout."""
     return Path(__file__).resolve().parents[3] / "vendor" / "STalign"
-
-
-def _checkout_sha(root: Path) -> str:
-    """Read the upstream SHA from Git, or from a pre-verified staged-job value."""
-    result = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode == 0:
-        return result.stdout.strip()
-
-    staged_sha = os.environ.get("SQUIDPY_PORTS_STALIGN_SHA")
-    if staged_sha:
-        return staged_sha
-    raise RuntimeError(
-        f"cannot verify vendored STalign at {root}: Git metadata is unavailable and "
-        "`SQUIDPY_PORTS_STALIGN_SHA` was not set by the staging job"
-    )
 
 
 @cache
@@ -58,18 +40,18 @@ def load() -> ModuleType:
     FileNotFoundError
         If the submodule is not checked out.
     RuntimeError
-        If the checkout is not at :data:`UPSTREAM_SHA`.
+        If ``STalign.py`` is not the file at :data:`UPSTREAM_SHA`.
     """
     root = vendor_root()
     path = root / "STalign" / "STalign.py"
     if not path.is_file():
         raise FileNotFoundError(f"vendored STalign missing at {path}; run `git submodule update --init`")
 
-    head = _checkout_sha(root)
-    if head != UPSTREAM_SHA:
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != STALIGN_PY_SHA256:
         raise RuntimeError(
-            f"vendored STalign is at {head}, expected {UPSTREAM_SHA}. Re-pin deliberately "
-            f"in upstream.py and regenerate the whole bundle -- a moved reference "
+            f"vendored STalign.py has sha256 {digest}, not the file at {UPSTREAM_SHA}. Re-pin "
+            f"deliberately in upstream.py and regenerate the whole bundle -- a moved reference "
             f"invalidates every tolerance downstream."
         )
 

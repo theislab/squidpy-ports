@@ -77,7 +77,7 @@ hatch test
 The `Generate reference bundle` workflow writes `stalign_reference.zarr.zip`, an AnnData written to a zipped zarr store (each
 section a dict of arrays in `uns`, with its provenance; the fixture parameters in
 `uns["fixtures"]`), checks
-that a second run is bit-identical, and uploads it as a run artifact. Publish it by hand:
+that a second run gives identical arrays, and uploads it as a run artifact. Publish it by hand:
 
 ```bash
 gh workflow run generate.yaml -R theislab/squidpy-ports
@@ -87,7 +87,7 @@ gh release create stalign-reference-vN stalign_reference.zarr.zip -R theislab/sq
 ```
 
 Then point squidpy's `test_stalign_reference.py` at the new URL and the sha256 the workflow
-prints. It runs on ubuntu because BLAS/FFT reduction order
+prints: it pins that one build (provenance timestamps differ between builds, the arrays do not). It runs on ubuntu because BLAS/FFT reduction order
 differs across platforms; `hatch run generate:run --out stalign_reference.zarr.zip` writes the
 same store locally.
 

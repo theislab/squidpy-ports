@@ -54,7 +54,14 @@ def _pin_determinism() -> None:
             )
     torch.set_num_threads(1)
     matplotlib.use("Agg")
-    warnings.simplefilter("ignore")
+    # upstream's own noise; anything else stays visible
+    for message in (
+        r"__array__ implementation doesn't accept a copy keyword",
+        r"Data has no positive values, and therefore cannot be log-scaled",
+        r"To copy construct from a tensor",
+        r"More than 20 figures have been opened",
+    ):
+        warnings.filterwarnings("ignore", message=message)
 
 
 def _provenance(**extra: Any) -> dict[str, Any]:
@@ -64,7 +71,7 @@ def _provenance(**extra: Any) -> dict[str, Any]:
     root = Path(__file__).resolve().parents[3]
     try:
         ports_commit = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            ["git", "-C", str(root), "describe", "--always", "--dirty", "--abbrev=40"],
             capture_output=True,
             text=True,
             check=True,
@@ -208,7 +215,7 @@ def _write_primitives(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     bwd = st.transform_points_target_to_source(
         [torch.as_tensor(x) for x in xv], velocity, torch.as_tensor(affine), pts
     ).numpy()
-    # Round trip, to show which side's time ordering actually inverts (divergence 6).
+    # round trip: shows which side's time ordering actually inverts
     roundtrip = st.transform_points_target_to_source(
         [torch.as_tensor(x) for x in xv], velocity, torch.as_tensor(affine), fwd
     ).numpy()
@@ -329,8 +336,8 @@ def _write_gradients(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
     # exactly zero (STalign.py:1071) and diffeo_start=0, so v_after = -epV * g.
     grad_v = -one["v"].numpy() / F.LDDMM_PARAMS["epV"]
 
-    # Second, independent extraction of dE/dL and dE/dT. Divergence 4 means
-    # LDDMM(niter=1)['A'] is the *initial* affine and carries no gradient information,
+    # Second, independent extraction of dE/dL and dE/dT. Upstream builds A at the top of
+    # each iteration, so LDDMM(niter=1)['A'] is the *initial* affine and carries no gradient information,
     # so the update has to be read out of a two-iteration run. The /10 is the
     # (it >= diffeo_start) * 9 scaling at STalign.py:1205-1206, active from iteration 0
     # at the default diffeo_start=0.
@@ -392,7 +399,7 @@ def _write_trajectory(st, clouds: F.Clouds, out: dict[str, dict]) -> None:
 
     for niter in (*TRAJECTORY_ITERS, CONVERGED_ITERS):
         run = st.LDDMM(niter=niter, L=lin, T=trans, xv=list(xv), v=v0, **kwargs)
-        # Divergence 4: upstream builds A at the top of each iteration and returns it,
+        # upstream builds A at the top of each iteration and returns it,
         # so LDDMM(n)['A'] reflects n-1 updates. squidpy(n).A is the post-update affine,
         # which is what LDDMM(n+1)['A'] holds.
         nxt = st.LDDMM(niter=niter + 1, L=lin, T=trans, xv=list(xv), v=v0, **kwargs)
@@ -811,10 +818,11 @@ def _smooth_velocity_3d(xv, nt: int) -> np.ndarray:
 
 def _write_bundle(sections: dict[str, dict], out: Path) -> None:
     """Write every section into ``uns`` of one AnnData, stored as a zipped zarr store at ``out``."""
+    import pathlib
+    import tempfile
     import zipfile
 
     import anndata as ad
-    from zarr.storage import ZipStore
 
     def arrays(section: dict) -> dict:
         return {key: value if key == "provenance" else np.asarray(value) for key, value in section.items()}
@@ -827,9 +835,15 @@ def _write_bundle(sections: dict[str, dict], out: Path) -> None:
         "MIXED_TARGET_STEP": MIXED_TARGET_STEP,
     }
     adata = ad.AnnData(uns={"fixtures": fixtures, **{name: arrays(section) for name, section in sections.items()}})
-    out.unlink(missing_ok=True)
-    with ZipStore(out, mode="w", compression=zipfile.ZIP_DEFLATED) as store:
-        adata.write_zarr(store)
+    # written to a directory and zipped once: anndata rewrites zarr.json while writing, which
+    # a ZipStore can only append, leaving duplicate members
+    with tempfile.TemporaryDirectory() as tmp:
+        adata.write_zarr(tmp)
+        out.unlink(missing_ok=True)
+        with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(pathlib.Path(tmp).rglob("*")):
+                if path.is_file():
+                    zf.write(path, path.relative_to(tmp).as_posix())
 
 
 def main(argv: list[str] | None = None) -> int:

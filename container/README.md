@@ -30,7 +30,7 @@ apptainer run --nv --writable-tmpfs --bind ./out:/output \
 - `--nv` exposes the host GPU; `--writable-tmpfs` gives the run a scratch overlay; `--bind`
   chooses where results land.
 - Notebooks: any file in [`docs/notebooks/squidpy-api/`][api]. The two `*-allen3Datlas` ones
-  additionally download the Allen atlas at run time; the rest read only vendored data.
+  also read the Allen atlas, which the image fetches at build time, so runs stay offline.
 
 [api]: https://github.com/theislab/squidpy-ports/tree/main/docs/notebooks/squidpy-api
 

@@ -54,7 +54,7 @@ jobs:
                  and not np.array_equal(value, b[name][key])]
           if bad:
               sys.exit("not reproducible: " + ", ".join(bad))
-          print("bit-identical across runs")
+          print("identical arrays across runs")
           PY
           sha256sum stalign_reference.zarr.zip
 

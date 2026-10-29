@@ -15,7 +15,7 @@ checks against a pinned sha256.
   torch, the vendored checkout and a minute of CPU, and add nothing.
 - **They're generated on one platform.** BLAS/FFT reduction order differs between macOS
   Accelerate and Linux OpenBLAS, so the bundle is generated once on ubuntu, the platform squidpy's
-  CI compares on, and the workflow checks that a second run is bit-identical.
+  CI compares on, and the workflow checks that a second run gives identical arrays.
 - **The intermediate values say where a disagreement starts.** A port can match at the end and
   differ along the way, or differ at the end because of one early step. Storing every stage
   (rasterisation, energy, gradients, a few iterations, the converged fit) means a failing test

@@ -77,7 +77,6 @@ From: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
     export PATH=/opt/squidpy-ports/.venv/bin:$PATH
     export JAX_ENABLE_X64=1
     # The image has no .git, so upstream.load() reads the pin from here (see upstream.py).
-    export SQUIDPY_PORTS_STALIGN_SHA=b2068edc98974efa54537eca194736e177bbe11d
     # Keep matplotlib's cache on the writable overlay, not a bound $HOME on Lustre.
     export MPLCONFIGDIR=/tmp/mpl
 

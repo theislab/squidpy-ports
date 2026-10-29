@@ -93,10 +93,6 @@ exclude_patterns = [
     "**.ipynb_checkpoints",
 ]
 
-# The replayed upstream notebooks carry an `application/json` output (the metrics blob)
-# that myst-nb cannot render. Nothing to fix in the notebooks -- the JSON is the record.
-suppress_warnings = ["mystnb.unknown_mime_type"]
-
 
 # -- Options for HTML output -------------------------------------------------
 
