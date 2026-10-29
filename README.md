@@ -44,7 +44,7 @@ This repository is BSD-3-Clause. The vendored upstream at `vendor/STalign` is
 **GPL-3.0** ([`LICENSE.vendor`][license-vendor]) and is included as a git submodule, not
 redistributed as part of any built artifact. Nothing is published to PyPI.
 
-The generated `.npz` bundle holds numerical outputs computed from synthetic, seeded
+The reference bundle holds numerical outputs computed from synthetic, seeded
 inputs defined in this repository — no upstream data is copied or redistributed.
 
 ## Layout
@@ -54,7 +54,7 @@ inputs defined in this repository — no upstream data is copied or redistribute
 | `vendor/STalign` | Upstream, pinned to one commit. Never edited, never linted, never pip-installed. |
 | `src/squidpy_ports/stalign/fixtures.py` | Input definitions, shared by the generator and the tests; depends on numpy only. |
 | `src/squidpy_ports/stalign/upstream.py` | Loads upstream by path, asserts the pin, and observes the LDDMM loop. |
-| `src/squidpy_ports/stalign/generate.py` | Writes the `.npz` bundle. |
+| `src/squidpy_ports/stalign/generate.py` | Writes the reference bundle, `stalign_reference.zarr.zip`. |
 
 Upstream is imported by path rather than installed because its `setup.py` reads
 `requirements.txt` verbatim and pins `numpy==1.23.4` / `torch==2.0.0` / `Pillow==9.5.0`,

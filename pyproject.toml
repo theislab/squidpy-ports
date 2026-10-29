@@ -24,7 +24,7 @@ classifiers = [
 # reads requirements.txt verbatim and pins numpy==1.23.4 / torch==2.0.0 / Pillow==9.5.0,
 # none of which have cp312+ wheels. Vendoring makes those pins irrelevant; uv.lock
 # supplies the reproducibility instead, and the resolved versions are recorded in the
-# provenance blob stamped onto every generated .npz.
+# provenance stamped into every section of the reference bundle.
 dependencies = [
   # STalign.py imports all of these unconditionally at module level.
   "matplotlib",

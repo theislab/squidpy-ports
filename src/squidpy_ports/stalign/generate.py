@@ -59,7 +59,7 @@ def _pin_determinism() -> None:
 
 
 def _provenance(**extra: Any) -> np.ndarray:
-    """A JSON blob stamped into every ``.npz`` so the fixtures stay falsifiable."""
+    """The provenance stamped into every section, so the outputs stay falsifiable."""
     import torch
 
     root = Path(__file__).resolve().parents[3]
@@ -444,7 +444,7 @@ IMAGE_ITERS = 12
 #: Initial affine for the image comparisons. Deliberately *not* identity, and not a round
 #: angle or an integer shift. Centred pixel axes are integers, so an identity start makes
 #: every interpolation sample land exactly on a grid line -- the degenerate case where
-#: upstream and squidpy can floor() to different neighbours (ledger row D10) and the
+#: upstream and squidpy can floor() to different neighbours, and the
 #: comparison measures that rather than the port. The point-cloud fixture avoids this the
 #: same way, via `fixtures.THETA` / `fixtures.SHIFT`.
 IMAGE_THETA = 0.0371449
@@ -480,7 +480,7 @@ def _write_image_mixed_units(st, clouds: F.Clouds, out: Path) -> None:
     against a density rasterised in microns is the ordinary case, and it is the case
     `xenium-heimage-alignment` is. Nothing measured the velocity grid there until
     `stalign_align_image` began reading each element's real placement, at which point the
-    grid moved by two orders of magnitude -- see ledger row D12.
+    grid moved by two orders of magnitude.
 
     `a` is deliberately *not* rescaled. Upstream builds the velocity grid from the source's
     axes, which stay in pixels, so the notebook's own shape is a kernel width tuned for the
@@ -637,7 +637,7 @@ SLICE_ITERS = 12
 
 #: Off-grid start for the 3D comparison, for the reason spelled out at `IMAGE_THETA`:
 #: centred voxel axes are integers, and an identity start would put every interpolation
-#: sample exactly on a grid line, where the comparison measures ledger row D10 rather
+#: sample exactly on a grid line, where the comparison measures that rather
 #: than the port. The z shift is deliberately not a whole number of slices.
 SLICE_THETA = 0.0271833
 SLICE_SCALE = 0.93
@@ -719,7 +719,7 @@ def _write_slice(st, clouds: F.Clouds, out: Path) -> None:
     )
     frozen = dict(kwargs, diffeo_start=SLICE_ITERS + 1)
     run = st.LDDMM_3D_to_slice(niter=SLICE_ITERS, **frozen)
-    # Divergence D4 again: upstream builds A at the top of each iteration and returns it.
+    # upstream builds A at the top of each iteration and returns it
     nxt = st.LDDMM_3D_to_slice(niter=SLICE_ITERS + 1, **frozen)
     _, captured = upstream.lddmm_with_grads(st, niter=SLICE_ITERS, entry="LDDMM_3D_to_slice", to_A="to_A_3D", **frozen)
     if not np.allclose(run["v"].numpy(), 0.0):
