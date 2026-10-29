@@ -20,7 +20,7 @@ page says what those values are and why they are stored rather than recomputed.
 Upstream STalign is pinned throughout to
 [`b2068ed`](https://github.com/JEFworks-Lab/STalign/tree/b2068edc98974efa54537eca194736e177bbe11d),
 and the squidpy fork to
-[`69dae69`](https://github.com/selmanozleyen/squidpy/tree/69dae69ad18ed3d3cade77e68cae0d35c285d873).
+[`aa2b414`](https://github.com/selmanozleyen/squidpy/tree/aa2b4142ae18903ab599676ebacc83e696b7dc17).
 Every page names the commit behind its own numbers.
 
 ```{toctree}
