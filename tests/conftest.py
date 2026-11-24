@@ -15,4 +15,4 @@ def _vendored(method: str):
     return fixture
 
 
-stalign, spage, tangram = map(_vendored, ("stalign", "spage", "tangram"))
+stalign, spage = map(_vendored, ("stalign", "spage"))

@@ -18,15 +18,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        method: [stalign, spage, tangram]
+        method: [stalign, spage]
     name: generate (${{ matrix.method }})
     env:
       BUNDLE: ${{ matrix.method }}_reference.zarr.zip
       MKL_NUM_THREADS: "1"
       MPLBACKEND: agg
       OMP_NUM_THREADS: "1"
-      # Tangram orders its training genes by iterating a set of strings
-      PYTHONHASHSEED: "0"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

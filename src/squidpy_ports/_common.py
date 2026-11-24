@@ -195,9 +195,7 @@ def generator_main(build: Callable[[], dict[str, Any]], env: dict[str, str], arg
     parser.add_argument("--out", type=Path, required=True, help="the .zarr.zip store to write")
     args = parser.parse_args(argv)
     for var, value in env.items():
-        # `python -E` ignores PYTHONHASHSEED while it still shows in os.environ
-        unset = sys.flags.hash_randomization if var == "PYTHONHASHSEED" else False
-        if os.environ.get(var) != value or unset:
+        if os.environ.get(var) != value:
             raise RuntimeError(f"{var} must be {value} before Python starts; see the `generate` workflow.")
     write_bundle(build(), args.out)
     print(f"wrote {args.out}")
