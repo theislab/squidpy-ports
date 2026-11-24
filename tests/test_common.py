@@ -9,7 +9,6 @@ import pytest
 
 from squidpy_ports import _common
 from squidpy_ports.spage import fixtures as spage_fixtures
-from squidpy_ports.tangram import fixtures as tangram_fixtures
 
 
 def test_bundle_round_trips(tmp_path):
@@ -94,8 +93,8 @@ def test_generator_main_checks_env(monkeypatch, tmp_path):
     assert _common.read_bundle(tmp_path / "b.zarr.zip")["run"]["x"].tolist() == [1.0]
 
 
-@pytest.mark.parametrize("F", [spage_fixtures, tangram_fixtures], ids=["spage", "tangram"])
-def test_imputation_fixtures_are_deterministic(F):
+def test_imputation_fixtures_are_deterministic():
+    F = spage_fixtures
     first, second = F.make_data(), F.make_data()
 
     for a, b in zip(first[:3], second[:3], strict=True):

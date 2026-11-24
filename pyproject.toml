@@ -64,17 +64,6 @@ optional-dependencies.stalign = [
   "torch",
   "tornado",
 ]
-# `import tangram` pulls in all of these, its plotting module included.
-optional-dependencies.tangram = [
-  "matplotlib",
-  "pandas",
-  "scanpy",
-  "scikit-learn",
-  "scipy",
-  "seaborn",
-  "torch",
-  "tqdm",
-]
 optional-dependencies.test = [
   "coverage>=7.10",
   "pytest",
@@ -99,13 +88,13 @@ scripts.clean = "git clean -fdX -- {args:docs}"
 # <method>_reference.zarr.zip` writes the bundle squidpy's reference tests download, `hatch run
 # <method>:test` runs the guards. The variables are what the generators require: single-threaded BLAS so
 # reduction order is fixed, a non-interactive matplotlib backend because STalign's LDDMM draws
-# unconditionally, and a fixed hash seed because Tangram orders its training genes by iterating a set.
+# unconditionally.
 [tool.hatch.envs.ports]
 installer = "uv"
 features = [ "test" ]
 scripts.generate = "python -m squidpy_ports.{env_name}.generate {args}"
 scripts.test = "pytest tests/test_common.py tests/test_{env_name}_generator.py {args}"
-env-vars = { MKL_NUM_THREADS = "1", MPLBACKEND = "agg", OMP_NUM_THREADS = "1", PYTHONHASHSEED = "0" }
+env-vars = { MKL_NUM_THREADS = "1", MPLBACKEND = "agg", OMP_NUM_THREADS = "1" }
 
 [tool.hatch.envs.stalign]
 template = "ports"
@@ -114,10 +103,6 @@ features = [ "stalign", "test" ]
 [tool.hatch.envs.spage]
 template = "ports"
 features = [ "spage", "test" ]
-
-[tool.hatch.envs.tangram]
-template = "ports"
-features = [ "tangram", "test" ]
 
 [tool.ruff]
 line-length = 120

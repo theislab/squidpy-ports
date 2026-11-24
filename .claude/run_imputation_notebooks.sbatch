@@ -6,14 +6,14 @@
 #SBATCH --mem=96G
 #SBATCH --time=03:00:00
 
-# Execute the SpaGE and Tangram public-API notebooks on a CPU node. Everything -- the clones, the venv,
+# Execute the SpaGE public-API notebook on a CPU node. Everything -- the clones, the venv,
 # the SpaGE datasets -- lives on node-local scratch; only the executed notebooks are written to OUT.
 #
 #   sbatch -o $HOME/imputation-nb/%j.log .claude/run_imputation_notebooks.sbatch [<ports-rev>] [<squidpy-rev>]
 set -euo pipefail
 
 PORTS_REV="${1:-imputation-notebooks}"
-SQUIDPY_REV="${2:-feat/impute-tangram}"
+SQUIDPY_REV="${2:-feat/impute-spage}"
 OUT="$HOME/imputation-nb/$SLURM_JOB_ID"
 S="/localscratch/$USER/imputation-nb-$SLURM_JOB_ID"
 export UV_CACHE_DIR="/localscratch/$USER/uv-cache" UV_PROJECT_ENVIRONMENT="$S/.venv"
@@ -23,11 +23,11 @@ mkdir -p "$S/work" "$TMPDIR" "$MPLCONFIGDIR" "$UV_CACHE_DIR" "$OUT"
 trap 'rm -rf "$S"' EXIT
 cd "$S"
 
-git clone -q --recurse-submodules=vendor/SpaGE --recurse-submodules=vendor/Tangram --shallow-submodules -b "$PORTS_REV" https://github.com/selmanozleyen/squidpy-ports.git ports
+git clone -q --recurse-submodules=vendor/SpaGE --shallow-submodules -b "$PORTS_REV" https://github.com/selmanozleyen/squidpy-ports.git ports
 git clone -q -b "$SQUIDPY_REV" https://github.com/selmanozleyen/squidpy.git squidpy
 echo "### ports $(git -C ports rev-parse HEAD) squidpy $(git -C squidpy rev-parse HEAD)"
 
-~/.local/bin/uv sync -q --frozen --project ports --extra spage --extra tangram
+~/.local/bin/uv sync -q --frozen --project ports --extra spage
 ~/.local/bin/uv pip install -q --python "$UV_PROJECT_ENVIRONMENT/bin/python" "./squidpy[jax]" loompy nbclient ipykernel
 PY="$UV_PROJECT_ENVIRONMENT/bin/python"
 
@@ -44,11 +44,11 @@ if [[ ! -f "$DATA/${FILES[1]}" ]]; then
     rm "$DATA/spage.zip"
 fi
 for f in "${FILES[@]}"; do ln -sfn "$DATA/$f" "work/$f"; done
-# squidpy's datasets download to `data/` under the working directory; the Tangram ones are 3+ GB
+# squidpy's datasets download to `data/` under the working directory
 mkdir -p "$DATA/squidpy-datasets" && ln -sfn "$DATA/squidpy-datasets" work/data
 
 status=0
-for nb in spage-tutorial tangram-tutorial; do
+for nb in spage-tutorial; do
     if NB_SRC="ports/docs/notebooks/squidpy-api/$nb.ipynb" NB_DST="$OUT/$nb.ipynb" "$PY" - <<'RUN'; then
 import os, time, nbformat
 from nbclient import NotebookClient
